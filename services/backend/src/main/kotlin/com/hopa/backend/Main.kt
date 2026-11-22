@@ -1,6 +1,8 @@
 package com.hopa.backend
 
+import com.hopa.backend.accounts.AccountService
 import com.hopa.backend.accounts.AdminSeed
+import com.hopa.backend.accounts.accountRoutes
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.admin.adminRoutes
 import com.hopa.backend.auth.AuthPort
@@ -50,6 +52,7 @@ fun Application.module(config: ServerConfig) {
     modelRoutes(config)
     pairingRoutes(config)
     pendingPairingRoutes(config)
+    accountRoutes(config)
     tokenRoutes(config)
     deviceRoutes(config)
     adminRoutes(config)
@@ -126,6 +129,11 @@ fun main() {
             null
         },
         pendingPairings = database?.let(::PendingPairingService),
+        accounts = if (database != null && tokens != null) {
+            AccountService(database, tokens = tokens)
+        } else {
+            null
+        },
         bootstrapToken = System.getenv("HOPA_BOOTSTRAP_TOKEN"),
         tokenIssuer = tokens,
         tasks = database?.let { PgTaskStore(it) } ?: InMemoryTaskStore(),

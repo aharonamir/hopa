@@ -1,5 +1,6 @@
 ﻿package com.hopa.backend
 
+import com.hopa.backend.accounts.AccountService
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.auth.AuthPort
 import com.hopa.backend.gateway.DeviceRegistry
@@ -34,6 +35,7 @@ data class ServerConfig(
     val db: DbProbe = DbProbe.Unconfigured,
     val pairing: PairingApi? = null,
     val pendingPairings: PendingPairingService? = null,
+    val accounts: AccountService? = null,
     val bootstrapToken: String? = null,
     val tokenIssuer: TokenIssuer? = null,
     val tasks: TaskStore = InMemoryTaskStore(),

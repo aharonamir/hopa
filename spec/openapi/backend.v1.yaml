@@ -436,6 +436,123 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/accounts:
+    post:
+      summary: Sign up a phone-number account with a household of one
+      description: |
+        Creates an account, a household of one, the owner member and the phone's
+        first device, all in one transaction, plus a household key wrap for that
+        device. The phone is E.164-normalized server-side and is only a login
+        lookup — it is never returned. Rate limited to five per minute per
+        address and per phone. A phone that is already registered (live or
+        deleted) answers the same uniform `E_AUTH` as a wrong password.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password, platform, name, publicKey, alg, selfWrappedKey]
+              properties:
+                phone: { type: string, description: E.164 phone number }
+                password: { type: string }
+                platform: { type: string, enum: [android, windows] }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: '\S'
+                  description: Non-blank, at most 100 characters
+                publicKey:
+                  type: string
+                  description: Base64 or base64url X25519 public key, exactly 32 bytes
+                alg: { type: string, enum: [x25519] }
+                selfWrappedKey:
+                  type: string
+                  description: Base64 or base64url household key wrap, 1 to 1024 bytes; the server stores the bytes and never unwraps them
+                pushToken: { type: string, nullable: true, maxLength: 4096 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountId, deviceId, householdId, accessToken, refreshToken, expiresAt]
+                properties:
+                  accountId: { type: string, format: uuid }
+                  deviceId: { type: string, format: uuid }
+                  householdId: { type: string, format: uuid }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "400":
+          description: Invalid phone, platform, name, public key, algorithm, wrap or JSON body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: The phone is already registered (`E_AUTH`, indistinguishable from a wrong password)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/session:
+    post:
+      summary: Sign in with a phone number and password
+      description: |
+        Creates a signed-in device for an existing account and returns its
+        tokens. No household key wrap is written and no history is returned. The
+        phone is only a login lookup and is never returned. A wrong phone and a
+        wrong password answer the same `E_AUTH`. Rate limited to five per minute
+        per address and per phone.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password, platform, name, publicKey]
+              properties:
+                phone: { type: string, description: E.164 phone number }
+                password: { type: string }
+                platform: { type: string, enum: [android, windows] }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: '\S'
+                  description: Non-blank, at most 100 characters
+                publicKey:
+                  type: string
+                  description: Base64 or base64url X25519 public key, exactly 32 bytes
+                pushToken: { type: string, nullable: true, maxLength: 4096 }
+      responses:
+        "201":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountId, deviceId, householdId, accessToken, refreshToken, expiresAt]
+                properties:
+                  accountId: { type: string, format: uuid }
+                  deviceId: { type: string, format: uuid }
+                  householdId: { type: string, format: uuid }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "400":
+          description: Invalid phone, platform, name, public key or JSON body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/token/refresh:
     post:
       summary: Rotate an access token
