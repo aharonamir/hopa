@@ -20,6 +20,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.util.UUID
 import kotlinx.serialization.json.JsonObject
@@ -182,6 +183,20 @@ fun Application.consoleRoutes(config: ServerConfig) {
                     result.status,
                     ConsoleViews.error(result.status.value, result.message),
                 )
+            }
+        }
+
+        // Catch-all for unknown `/console` sub-paths, registered last so the
+        // defined routes above always win. An unauthenticated caller is sent to
+        // the sign-in form; an authenticated caller gets an empty 404 (no page
+        // content, no token leak).
+        route("/console/{...}") {
+            handle {
+                if (call.consoleIdentity(config) == null) {
+                    call.respondRedirect("/console/sign-in")
+                } else {
+                    call.respond(HttpStatusCode.NotFound)
+                }
             }
         }
     }

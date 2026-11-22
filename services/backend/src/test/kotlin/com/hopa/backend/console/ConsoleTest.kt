@@ -414,4 +414,48 @@ class ConsoleTest {
         assertTrue(html.contains("&lt;script&gt;"), html)
         assertFalse(html.contains("<script>"), html)
     }
+
+    @Test
+    fun `unknown console sub-paths redirect unauthenticated and 404 authenticated`() = testApplication {
+        val admin = seedAdminSession()
+        application { module(config()) }
+        val noRedirect = createClient { followRedirects = false }
+
+        val unauth = noRedirect.get("/console/does-not-exist")
+        assertEquals(HttpStatusCode.Found, unauth.status)
+        assertEquals("/console/sign-in", unauth.headers[HttpHeaders.Location])
+
+        val auth = noRedirect.get("/console/does-not-exist") {
+            header("Cookie", "hopa_admin=${admin.token}")
+        }
+        assertEquals(HttpStatusCode.NotFound, auth.status)
+        assertFalse(auth.bodyAsText().contains(admin.token), "an unknown path must not leak the token")
+    }
+
+    @Test
+    fun `the device page needs a household`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        var response = client.console(admin.token, "/console/device/${fixture.deviceId}")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+
+        response = client.console(admin.token, "/console/device/${fixture.deviceId}?household=not-a-uuid")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `a device page for another household is 404`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val other = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.console(
+            admin.token,
+            "/console/device/${other.deviceId}?household=${fixture.householdId}",
+        )
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
 }
