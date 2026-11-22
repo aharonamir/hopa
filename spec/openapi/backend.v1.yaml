@@ -553,6 +553,111 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/session/otp:
+    post:
+      summary: Request a one-time SMS code
+      description: |
+        Mints a 6-digit single-use code and sends it to the phone. The phone is
+        E.164-normalized server-side and is only a login lookup — it is never
+        returned and never logged. The answer is always 202 with the same body
+        whether or not the phone has an account, so the phone cannot be
+        enumerated. When SMS is disabled (`HOPA_SMS_ENABLED` is not `true`) the
+        route answers `E_UNSUPPORTED`. Rate limited to five per minute per
+        address and per phone, and three codes per phone per hour.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string, description: E.164 phone number }
+      responses:
+        "202":
+          description: Accepted (whether or not the phone has an account)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted: { type: boolean }
+        "400":
+          description: Invalid phone or JSON body (`E_SCHEMA`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: SMS OTP is not enabled on this deployment (`E_UNSUPPORTED`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/session/otp/verify:
+    post:
+      summary: Verify a one-time code and sign in
+      description: |
+        Verifies the code and, when it matches, signs in or provisions the
+        account: an existing account (verified or not) binds to that account and
+        signs in, and a phone with no account is provisioned on the spot. A
+        wrong, expired or used code answers the same uniform `E_AUTH` as an
+        unknown phone; a `deleted_at` account is refused, never resurrected. The
+        device algorithm is always x25519. The phone is only a login lookup and
+        is never returned. Rate limited to five per minute per address and per
+        phone.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code, platform, name, publicKey]
+              properties:
+                phone: { type: string, description: E.164 phone number }
+                code: { type: string, description: Six decimal digits }
+                platform: { type: string, enum: [android, windows] }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: '\S'
+                  description: Non-blank, at most 100 characters
+                publicKey:
+                  type: string
+                  description: Base64 or base64url X25519 public key, exactly 32 bytes
+                pushToken: { type: string, nullable: true, maxLength: 4096 }
+      responses:
+        "201":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountId, deviceId, householdId, accessToken, refreshToken, expiresAt]
+                properties:
+                  accountId: { type: string, format: uuid }
+                  deviceId: { type: string, format: uuid }
+                  householdId: { type: string, format: uuid }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "400":
+          description: Invalid phone, code, platform, name, public key or JSON body (`E_SCHEMA`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: SMS OTP is not enabled on this deployment (`E_UNSUPPORTED`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /v1/token/refresh:
     post:
       summary: Rotate an access token

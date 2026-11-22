@@ -2,7 +2,11 @@ package com.hopa.backend
 
 import com.hopa.backend.accounts.AccountService
 import com.hopa.backend.accounts.AdminSeed
+import com.hopa.backend.accounts.LogSmsPort
+import com.hopa.backend.accounts.OtpService
+import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.accounts.accountRoutes
+import com.hopa.backend.accounts.otpRoutes
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.admin.adminRoutes
 import com.hopa.backend.auth.AuthPort
@@ -53,6 +57,7 @@ fun Application.module(config: ServerConfig) {
     pairingRoutes(config)
     pendingPairingRoutes(config)
     accountRoutes(config)
+    otpRoutes(config)
     tokenRoutes(config)
     deviceRoutes(config)
     adminRoutes(config)
@@ -115,6 +120,23 @@ fun main() {
 
     val traceStore = database?.let { PgTraceStore(it) }
 
+    val accountService: AccountService? = if (database != null && tokens != null) {
+        AccountService(database, tokens = tokens)
+    } else {
+        null
+    }
+
+    // SMS OTP is off by default: no transport is wired and the routes answer
+    // E_UNSUPPORTED. Enabling it also swaps in the dev-only LogSmsPort, which is
+    // the only transport this deployment ships.
+    val smsEnabled = System.getenv("HOPA_SMS_ENABLED") == "true"
+    val sms: SmsPort? = if (smsEnabled) LogSmsPort() else null
+    val otp: OtpService? = if (smsEnabled && sms != null && accountService != null) {
+        OtpService(accountService, sms)
+    } else {
+        null
+    }
+
     val config = ServerConfig(
         version = version,
         auth = auth ?: AuthPort.DenyAll,
@@ -129,11 +151,10 @@ fun main() {
             null
         },
         pendingPairings = database?.let(::PendingPairingService),
-        accounts = if (database != null && tokens != null) {
-            AccountService(database, tokens = tokens)
-        } else {
-            null
-        },
+        accounts = accountService,
+        smsEnabled = smsEnabled,
+        sms = sms,
+        otp = otp,
         bootstrapToken = System.getenv("HOPA_BOOTSTRAP_TOKEN"),
         tokenIssuer = tokens,
         tasks = database?.let { PgTaskStore(it) } ?: InMemoryTaskStore(),

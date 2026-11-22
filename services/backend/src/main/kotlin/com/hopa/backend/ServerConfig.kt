@@ -1,6 +1,8 @@
 ﻿package com.hopa.backend
 
 import com.hopa.backend.accounts.AccountService
+import com.hopa.backend.accounts.OtpService
+import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.auth.AuthPort
 import com.hopa.backend.gateway.DeviceRegistry
@@ -36,6 +38,12 @@ data class ServerConfig(
     val pairing: PairingApi? = null,
     val pendingPairings: PendingPairingService? = null,
     val accounts: AccountService? = null,
+    /** Master switch for the SMS OTP routes; false by default (no SMS provider). */
+    val smsEnabled: Boolean = false,
+    /** The one SMS transport, provided only when [smsEnabled] is true. */
+    val sms: SmsPort? = null,
+    /** The OTP state machine, constructed only when [smsEnabled] and accounts exist. */
+    val otp: OtpService? = null,
     val bootstrapToken: String? = null,
     val tokenIssuer: TokenIssuer? = null,
     val tasks: TaskStore = InMemoryTaskStore(),

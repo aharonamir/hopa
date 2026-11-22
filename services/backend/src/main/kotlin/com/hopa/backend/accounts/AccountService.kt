@@ -4,6 +4,7 @@ import com.hopa.backend.http.RateLimiter
 import com.hopa.backend.pairing.Issued
 import com.hopa.backend.pairing.TokenIssuer
 import com.hopa.backend.store.Database
+import java.security.SecureRandom
 import java.sql.Connection
 import java.util.Base64
 import java.util.UUID
@@ -36,6 +37,8 @@ class AccountService(
 ) {
     private val ipLimiter = RateLimiter(perMinute, 60_000, clock)
     private val phoneLimiter = RateLimiter(perMinute, 60_000, clock)
+
+    private val secureRandom = SecureRandom()
 
     // A real argon2id encoding, verified only so a missing account pays the same
     // cost as a present one. It is never the caller's password.
@@ -89,29 +92,15 @@ class AccountService(
         // Account, household, owner member, device, wrap and tokens commit in one
         // tenant transaction. A failure anywhere rolls the whole thing back.
         val signedIn = db.tenant(householdId) { connection ->
-            connection.prepareStatement(
-                "insert into accounts(id, phone, password_hash) values (?::uuid, ?, ?)",
-            ).use {
-                it.setString(1, accountId)
-                it.setString(2, phone)
-                it.setString(3, passwordHash)
-                it.executeUpdate()
-            }
-            connection.prepareStatement("insert into households(id, name) values (?::uuid, ?)").use {
-                it.setString(1, householdId)
-                it.setString(2, "Home")
-                it.executeUpdate()
-            }
-            connection.prepareStatement(
-                "insert into members(id, household_id, role, display_name, account_id) " +
-                    "values (?::uuid, ?::uuid, 'owner', ?, ?::uuid)",
-            ).use {
-                it.setString(1, memberId)
-                it.setString(2, householdId)
-                it.setString(3, request.name)
-                it.setString(4, accountId)
-                it.executeUpdate()
-            }
+            createAccountHouseholdAndMember(
+                connection,
+                accountId,
+                householdId,
+                memberId,
+                phone,
+                passwordHash,
+                request.name,
+            )
             val device = issueSignedInDevice(
                 connection,
                 accountId,
@@ -134,16 +123,7 @@ class AccountService(
             device
         }
 
-        return AccountOutcome.Ok(
-            AccountCreated(
-                accountId = accountId,
-                deviceId = signedIn.deviceId,
-                householdId = householdId,
-                accessToken = signedIn.access.token,
-                refreshToken = signedIn.refresh.token,
-                expiresAt = signedIn.access.expiresAt,
-            ),
-        )
+        return AccountOutcome.Ok(signedIn.toCreated(accountId, householdId))
     }
 
     fun signIn(request: SignInRequest, remoteAddress: String): AccountOutcome<AccountCreated> {
@@ -191,16 +171,8 @@ class AccountService(
 
         // The household of one the account owns. The definer function is the only
         // non-tenant path into members; the phone never leaves the server.
-        val location = db.read { connection ->
-            connection.prepareStatement(
-                "select household_id::text, member_id::text from admin_resolve_phone(?)",
-            ).use {
-                it.setString(1, phone)
-                it.executeQuery().use { rows ->
-                    if (rows.next()) HouseholdLocation(rows.getString(1), rows.getString(2)) else null
-                }
-            }
-        } ?: return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
+        val location = resolveLocation(phone)
+            ?: return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
 
         // A signed-in device and its tokens; no wrap, no history.
         val signedIn = db.tenant(location.householdId) { connection ->
@@ -216,16 +188,107 @@ class AccountService(
             )
         }
 
-        return AccountOutcome.Ok(
-            AccountCreated(
-                accountId = account.id,
-                deviceId = signedIn.deviceId,
-                householdId = location.householdId,
-                accessToken = signedIn.access.token,
-                refreshToken = signedIn.refresh.token,
-                expiresAt = signedIn.access.expiresAt,
-            ),
-        )
+        return AccountOutcome.Ok(signedIn.toCreated(account.id, location.householdId))
+    }
+
+    /**
+     * The verified-wins OTP entry point, called only after the caller proved
+     * possession of the phone by presenting a valid one-time code. The phone is
+     * already normalized.
+     *
+     * An existing verified account simply signs in. An existing unverified
+     * account binds to that same account and stamps `verified_at` (no second
+     * account). A `deleted_at` account is refused, never resurrected. A phone
+     * with no account is provisioned on the spot: an account already verified,
+     * its household of one, the owner member and the device in one transaction,
+     * with no content-key wrap.
+     */
+    internal fun signInOrProvisionViaOtp(
+        phone: String,
+        platform: String,
+        name: String,
+        publicKey: ByteArray,
+        pushToken: String?,
+    ): AccountOutcome<AccountCreated> {
+        val account = db.read { connection ->
+            connection.prepareStatement(
+                "select id::text, verified_at from accounts where phone = ? and deleted_at is null",
+            ).use {
+                it.setString(1, phone)
+                it.executeQuery().use { rows ->
+                    if (rows.next()) {
+                        OtpAccountRow(rows.getString(1), rows.getTimestamp(2) != null)
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
+
+        if (account != null) {
+            val location = resolveLocation(phone)
+                ?: return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
+            val signedIn = db.tenant(location.householdId) { connection ->
+                issueSignedInDevice(
+                    connection,
+                    account.id,
+                    location.householdId,
+                    location.memberId,
+                    platform,
+                    name,
+                    publicKey,
+                    pushToken,
+                    stampVerifiedAt = !account.verified,
+                )
+            }
+            return AccountOutcome.Ok(signedIn.toCreated(account.id, location.householdId))
+        }
+
+        // A tombstoned phone must not be resurrected by an OTP login.
+        val tombstoned = db.read { connection ->
+            connection.prepareStatement(
+                "select 1 from accounts where phone = ? and deleted_at is not null limit 1",
+            ).use {
+                it.setString(1, phone)
+                it.executeQuery().use { rows -> rows.next() }
+            }
+        }
+        if (tombstoned) {
+            return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
+        }
+
+        val accountId = UUID.randomUUID().toString()
+        val householdId = UUID.randomUUID().toString()
+        val memberId = UUID.randomUUID().toString()
+        // `password_hash` is not null, so store an argon2 hash of a random 32-byte
+        // throwaway that is never retained or logged; password sign-in for this
+        // account therefore always fails.
+        val passwordHash = throwawayPasswordHash()
+
+        val signedIn = db.tenant(householdId) { connection ->
+            createAccountHouseholdAndMember(
+                connection,
+                accountId,
+                householdId,
+                memberId,
+                phone,
+                passwordHash,
+                name,
+                verified = true,
+            )
+            issueSignedInDevice(
+                connection,
+                accountId,
+                householdId,
+                memberId,
+                platform,
+                name,
+                publicKey,
+                pushToken,
+            )
+        }
+
+        return AccountOutcome.Ok(signedIn.toCreated(accountId, householdId))
     }
 
     /**
@@ -275,6 +338,48 @@ class AccountService(
         )
     }
 
+    /**
+     * The shared sign-up/provision seam: inserts the account, its household of
+     * one and the owner member in the caller's transaction. Sign-up leaves the
+     * account unverified; an OTP provisioning marks it verified (`verified_at =
+     * now()`).
+     */
+    internal fun createAccountHouseholdAndMember(
+        connection: Connection,
+        accountId: String,
+        householdId: String,
+        memberId: String,
+        phone: String,
+        passwordHash: String,
+        displayName: String,
+        verified: Boolean = false,
+    ) {
+        connection.prepareStatement(
+            "insert into accounts(id, phone, password_hash, verified_at) values (?::uuid, ?, ?, " +
+                (if (verified) "now()" else "null") + ")",
+        ).use {
+            it.setString(1, accountId)
+            it.setString(2, phone)
+            it.setString(3, passwordHash)
+            it.executeUpdate()
+        }
+        connection.prepareStatement("insert into households(id, name) values (?::uuid, ?)").use {
+            it.setString(1, householdId)
+            it.setString(2, "Home")
+            it.executeUpdate()
+        }
+        connection.prepareStatement(
+            "insert into members(id, household_id, role, display_name, account_id) " +
+                "values (?::uuid, ?::uuid, 'owner', ?, ?::uuid)",
+        ).use {
+            it.setString(1, memberId)
+            it.setString(2, householdId)
+            it.setString(3, displayName)
+            it.setString(4, accountId)
+            it.executeUpdate()
+        }
+    }
+
     private fun phoneExists(phone: String): Boolean =
         db.read { connection ->
             connection.prepareStatement("select 1 from accounts where phone = ? limit 1").use {
@@ -282,6 +387,34 @@ class AccountService(
                 it.executeQuery().use { rows -> rows.next() }
             }
         }
+
+    private fun resolveLocation(phone: String): HouseholdLocation? =
+        db.read { connection ->
+            connection.prepareStatement(
+                "select household_id::text, member_id::text from admin_resolve_phone(?)",
+            ).use {
+                it.setString(1, phone)
+                it.executeQuery().use { rows ->
+                    if (rows.next()) HouseholdLocation(rows.getString(1), rows.getString(2)) else null
+                }
+            }
+        }
+
+    private fun throwawayPasswordHash(): String {
+        val bytes = ByteArray(32)
+        secureRandom.nextBytes(bytes)
+        return Passwords.hash(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).toCharArray())
+    }
+
+    private fun SignedInDevice.toCreated(accountId: String, householdId: String): AccountCreated =
+        AccountCreated(
+            accountId = accountId,
+            deviceId = deviceId,
+            householdId = householdId,
+            accessToken = access.token,
+            refreshToken = refresh.token,
+            expiresAt = access.expiresAt,
+        )
 
     private fun validateName(value: String): String? = when {
         value.isBlank() -> "name must not be blank"
@@ -307,6 +440,8 @@ class AccountService(
     )
 
     private data class AccountRow(val id: String, val passwordHash: String)
+
+    private data class OtpAccountRow(val id: String, val verified: Boolean)
 
     private data class HouseholdLocation(val householdId: String, val memberId: String)
 
