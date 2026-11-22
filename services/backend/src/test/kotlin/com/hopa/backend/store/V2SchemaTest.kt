@@ -376,7 +376,7 @@ class V2SchemaTest {
 
         assertEquals(listOf("member:uuid"), inputs(member))
         assertEquals(
-            listOf("household_id:uuid", "member_id:uuid", "display_name:text"),
+            listOf("household_id:uuid", "member_id:uuid", "display_name:text", "account_id:uuid"),
             outputs(member),
         )
 
@@ -393,7 +393,7 @@ class V2SchemaTest {
 
         assertEquals(listOf("household:uuid"), inputs(household))
         assertEquals(
-            listOf("household_id:uuid", "member_id:uuid", "display_name:text"),
+            listOf("household_id:uuid", "member_id:uuid", "display_name:text", "account_id:uuid"),
             outputs(household),
         )
 

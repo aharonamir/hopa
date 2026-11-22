@@ -8,7 +8,11 @@ import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.accounts.accountRoutes
 import com.hopa.backend.accounts.otpRoutes
 import com.hopa.backend.admin.AdminAuth
+import com.hopa.backend.admin.AdminSessions
+import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.admin.adminRoutes
+import com.hopa.backend.admin.adminSessionRoutes
+import com.hopa.backend.admin.lookupRoutes
 import com.hopa.backend.auth.AuthPort
 import com.hopa.backend.gateway.DeviceRegistry
 import com.hopa.backend.gateway.gatewayRoutes
@@ -61,6 +65,8 @@ fun Application.module(config: ServerConfig) {
     tokenRoutes(config)
     deviceRoutes(config)
     adminRoutes(config)
+    adminSessionRoutes(config)
+    lookupRoutes(config)
     traceRoutes(config)
     gatewayRoutes(config)
 }
@@ -119,6 +125,7 @@ fun main() {
     }
 
     val traceStore = database?.let { PgTraceStore(it) }
+    val eventLog = JsonEventLog()
 
     val accountService: AccountService? = if (database != null && tokens != null) {
         AccountService(database, tokens = tokens)
@@ -142,6 +149,8 @@ fun main() {
         auth = auth ?: AuthPort.DenyAll,
         adminAuth = database?.let(::AdminAuth),
         adminLookups = adminLookups,
+        adminSessions = database?.let(::AdminSessions),
+        householdLookup = database?.let { HouseholdLookup(it, eventLog) },
         devices = devices,
         registry = registry,
         db = database?.let(::PostgresProbe) ?: DbProbe.Unconfigured,
@@ -161,7 +170,7 @@ fun main() {
         push = push,
         traces = traceStore ?: TraceRecorder.None,
         traceQuery = traceStore,
-        log = JsonEventLog(),
+        log = eventLog,
     )
 
     embeddedServer(Netty, port = port, host = "0.0.0.0") {

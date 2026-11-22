@@ -7,12 +7,10 @@ import com.hopa.backend.http.respondError
 import com.hopa.backend.store.DeviceInventory
 import com.hopa.backend.tasks.RouteResult
 import com.hopa.backend.tasks.TaskRouter
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -42,9 +40,6 @@ data class DiagRequest(
 
 @Serializable
 data class DiagAccepted(val taskId: String, val trace: String, val state: String)
-
-private val UUID_PATTERN =
-    Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 /**
  * The operations console: the household's device inventory and the diagnostic
@@ -179,6 +174,9 @@ fun Application.adminRoutes(config: ServerConfig) {
  * BYPASSRLS role, which some managed Postgres providers do not allow. The
  * deployment says whether they were provisioned; without them the routes
  * answer a stable E_UNSUPPORTED instead of calling a missing function.
+ *
+ * The shared [adminIdentity] bearer check lives in `AdminAuth.kt` so the
+ * session and lookup routes reuse it; this file keeps only the lookup gate.
  */
 private suspend fun ApplicationCall.adminLookupsAvailable(config: ServerConfig): Boolean {
     if (config.adminLookups) return true
@@ -188,17 +186,4 @@ private suspend fun ApplicationCall.adminLookupsAvailable(config: ServerConfig):
         "admin lookups are not provisioned on this database",
     )
     return false
-}
-
-/** Resolves the admin bearer, answering 401 E_AUTH and returning null when it is unknown. */
-private suspend fun ApplicationCall.adminIdentity(config: ServerConfig): AdminIdentity? {
-    val token = request.header(HttpHeaders.Authorization)
-        ?.removePrefix("Bearer ")
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-    val identity = token?.let { config.adminAuth?.adminFor(it) }
-    if (identity == null) {
-        respondError(HttpStatusCode.Unauthorized, "E_AUTH", "unknown or expired admin token")
-    }
-    return identity
 }

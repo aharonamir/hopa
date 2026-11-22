@@ -852,6 +852,84 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+  /v1/admin/session:
+    post:
+      summary: Sign in to the admin console
+      description: |
+        Unauthenticated. Exchanges an admin email and password for an 8-hour
+        opaque session token, stored only as SHA-256. An unknown email and a
+        wrong password answer the same uniform `E_AUTH`; sign-in is rate limited
+        to five per minute per address and per email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "201":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt]
+                properties:
+                  token: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "400":
+          description: Invalid JSON body or a blank email (`E_SCHEMA`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/admin/households:
+    get:
+      summary: Look up a household by phone, member id or household id (admin console)
+      description: |
+        Requires an admin session token, never a device token. The `query` is an
+        E.164 phone number, a member id or a household id; a uuid resolves as a
+        member first, then as a household. A well-formed query with no match
+        answers `[]`; a missing, blank or malformed query is `E_SCHEMA`. Every
+        lookup writes an `admin.pii.read` access-log line (a hash of the query,
+        never the raw phone or uuid) before any account read.
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The matching rows (possibly empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [householdId, memberId, displayName, verified, accountStatus]
+                  properties:
+                    householdId: { type: string, format: uuid }
+                    memberId: { type: string, format: uuid }
+                    displayName: { type: string }
+                    phone: { type: string, nullable: true }
+                    verified: { type: boolean }
+                    accountStatus: { type: string, enum: [verified, unverified, none] }
+        "400":
+          description: The query is missing, blank or malformed (`E_SCHEMA`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/traces/{traceId}:
     get:
       summary: The path one message took, by trace id

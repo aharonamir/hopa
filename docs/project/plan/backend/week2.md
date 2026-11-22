@@ -107,6 +107,10 @@ also returns `account_id` (four columns); `admin_list_devices(household uuid)`
 returns `(device_id, platform, name, last_seen_at, revoked_at)`. The app role has
 no `BYPASSRLS` and no blanket tenant GUC.
 
+`V5__admin_account_id.sql` adds `account_id` to `admin_resolve_member` and
+`admin_resolve_household` so a lookup by member or household id can also return
+the account fields (phone, verified, account status).
+
 Sync v0's tables (`threads`, `turns`, `device_cursors` — naming to be settled by
 Monday's mini-design) land in the same migration only if that design is agreed
 Monday; otherwise a `V3` follows mid-week.

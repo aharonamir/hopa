@@ -4,6 +4,8 @@ import com.hopa.backend.accounts.AccountService
 import com.hopa.backend.accounts.OtpService
 import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.admin.AdminAuth
+import com.hopa.backend.admin.AdminSessions
+import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.auth.AuthPort
 import com.hopa.backend.gateway.DeviceRegistry
 import com.hopa.backend.http.RateLimiter
@@ -31,6 +33,10 @@ data class ServerConfig(
     val adminAuth: AdminAuth? = null,
     /** True only when the admin lookup functions were provisioned on this database. */
     val adminLookups: Boolean = true,
+    /** The admin sign-in issuer; absent without a database. */
+    val adminSessions: AdminSessions? = null,
+    /** The admin household lookup; absent without a database. */
+    val householdLookup: HouseholdLookup? = null,
     val devices: DeviceDirectory = DeviceDirectory.Empty,
     /** The one in-memory presence registry shared by the gateway and device routes. */
     val registry: DeviceRegistry = DeviceRegistry(),
