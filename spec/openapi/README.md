@@ -29,3 +29,23 @@ One file per service, versioned in git, reviewed like code.
 2. Add the path (and its schemas) to the spec.
 3. Run `python services/tools/checks/check-openapi.py` — it fails both ways on purpose.
 4. If the endpoint needs the pooled routing, document the header it uses.
+
+## The admin console (`/console/*`)
+
+The console is server-rendered HTML (kotlinx.html), not JSON, so it lives outside
+the YAML contract files. Its session is the opaque admin token in the `hopa_admin`
+cookie (`HttpOnly`, `Secure`, `Path=/`, `SameSite=Strict`); the token never appears
+in a URL, a log or a rendered page.
+
+| Path | Method | Auth | Purpose |
+|---|---|---|---|
+| `/console/sign-in` | GET | none | the sign-in form |
+| `/console/sign-in` | POST | none | sign in; 303 to `/console` on success, uniform 401 re-render otherwise |
+| `/console` | GET | cookie | version + database status |
+| `/console/lookup?query=` | GET | cookie | household lookup (member id, household id or E.164 phone) with masked phone and device presence |
+| `/console/device/{id}?household=` | GET | cookie | one device's state and the diagnostic form |
+| `/console/device/{id}/diag` | POST | cookie | send a diagnostic; 202 with a task-id/trace/state confirmation |
+
+Any unauthenticated `/console*` request except the sign-in form redirects (302) to
+`/console/sign-in`. Console pages never read or render a task body, task event,
+turn or chat.

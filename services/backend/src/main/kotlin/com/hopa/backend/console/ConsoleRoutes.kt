@@ -1,0 +1,224 @@
+package com.hopa.backend.console
+
+import com.hopa.backend.ServerConfig
+import com.hopa.backend.accounts.Phones
+import com.hopa.backend.admin.AdminIdentity
+import com.hopa.backend.admin.AdminSessionOutcome
+import com.hopa.backend.admin.DiagSender
+import com.hopa.backend.admin.UUID_PATTERN
+import com.hopa.backend.pairing.remoteAddress
+import com.hopa.backend.store.DeviceInventory
+import io.ktor.http.Cookie
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
+import io.ktor.server.html.respondHtml
+import io.ktor.server.request.receiveParameters
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.routing
+import java.util.UUID
+import kotlinx.serialization.json.JsonObject
+
+/**
+ * The operations console, server-rendered kotlinx.html pages behind
+ * `/console`. The session is the opaque admin token in the `hopa_admin` cookie
+ * (HttpOnly/Secure/SameSite=Strict); the token never appears in a URL, a log
+ * or a rendered page. Every unauthenticated `/console*` request except the
+ * sign-in form redirects to `/console/sign-in`.
+ */
+fun Application.consoleRoutes(config: ServerConfig) {
+    val diag = DiagSender.from(config)
+
+    routing {
+        get("/console/sign-in") {
+            call.respondHtml(HttpStatusCode.OK, ConsoleViews.signIn(error = false))
+        }
+
+        post("/console/sign-in") {
+            val sessions = config.adminSessions
+            if (sessions == null) {
+                call.respondHtml(HttpStatusCode.Unauthorized, ConsoleViews.signIn(error = true))
+                return@post
+            }
+            val params = call.receiveParameters()
+            val email = params["email"].orEmpty()
+            val password = params["password"].orEmpty()
+            when (val outcome = sessions.signIn(email, password, remoteAddress(call))) {
+                is AdminSessionOutcome.Ok -> {
+                    call.response.cookies.append(
+                        Cookie(
+                            name = "hopa_admin",
+                            value = outcome.value.token,
+                            path = "/",
+                            secure = true,
+                            httpOnly = true,
+                            extensions = mapOf("SameSite" to "Strict"),
+                        ),
+                    )
+                    call.response.headers.append(HttpHeaders.Location, "/console")
+                    call.respond(HttpStatusCode.SeeOther)
+                }
+
+                is AdminSessionOutcome.Refused ->
+                    call.respondHtml(HttpStatusCode.Unauthorized, ConsoleViews.signIn(error = true))
+            }
+        }
+
+        get("/console") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@get
+            call.respondHtml(
+                HttpStatusCode.OK,
+                ConsoleViews.index(version = config.version, db = config.db.status()),
+            )
+        }
+
+        get("/console/lookup") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@get
+            val lookup = config.householdLookup
+            if (lookup == null) {
+                call.respondHtml(HttpStatusCode.ServiceUnavailable, ConsoleViews.error(503, "household lookup is not configured"))
+                return@get
+            }
+            val query = call.request.queryParameters["query"]?.trim().orEmpty()
+            if (query.isEmpty()) {
+                call.respondHtml(
+                    HttpStatusCode.OK,
+                    ConsoleViews.lookupForm("Enter a phone number, member id or household id."),
+                )
+                return@get
+            }
+            if (Phones.normalize(query) == null && !UUID_PATTERN.matches(query)) {
+                call.respondHtml(
+                    HttpStatusCode.BadRequest,
+                    ConsoleViews.lookupError(query, "query must be an E.164 phone number or a uuid"),
+                )
+                return@get
+            }
+            val rows = lookup.lookup(admin.adminId, query).map { row ->
+                ConsoleLookupRow(
+                    householdId = row.householdId,
+                    memberId = row.memberId,
+                    displayName = row.displayName,
+                    maskedPhone = row.phone?.let { "…" + it.takeLast(4) },
+                    verified = row.verified,
+                    accountStatus = row.accountStatus,
+                    queueDepth = config.db.queueDepth(row.householdId),
+                    devices = config.devicesFor(row.householdId),
+                )
+            }
+            call.respondHtml(HttpStatusCode.OK, ConsoleViews.lookupResults(query, rows))
+        }
+
+        get("/console/device/{id}") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@get
+            val deviceId = call.parameters["id"].orEmpty()
+                .takeIf { UUID_PATTERN.matches(it) }
+                ?.let { UUID.fromString(it).toString() }
+            if (deviceId == null) {
+                call.respondHtml(HttpStatusCode.BadRequest, ConsoleViews.error(400, "device id must be a uuid"))
+                return@get
+            }
+            val household = call.householdOrNull()
+            if (household == null) {
+                call.respondHtml(HttpStatusCode.BadRequest, ConsoleViews.error(400, "household is required and must be a uuid"))
+                return@get
+            }
+            val inventory = config.devices as? DeviceInventory
+            if (inventory == null) {
+                call.respondHtml(HttpStatusCode.ServiceUnavailable, ConsoleViews.error(503, "device inventory is not configured"))
+                return@get
+            }
+            val row = inventory.adminList(household).firstOrNull { it.id == deviceId }
+            if (row == null) {
+                call.respondHtml(HttpStatusCode.NotFound, ConsoleViews.error(404, "no such device in this household"))
+                return@get
+            }
+            call.respondHtml(
+                HttpStatusCode.OK,
+                ConsoleViews.device(
+                    ConsoleDevice(
+                        id = row.id,
+                        platform = row.platform,
+                        name = row.name,
+                        lastSeenAt = row.lastSeenAt,
+                        revokedAt = row.revokedAt,
+                        online = config.registry.online(row.id),
+                    ),
+                    household = household,
+                ),
+            )
+        }
+
+        post("/console/device/{id}/diag") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@post
+            val deviceId = call.parameters["id"].orEmpty()
+                .takeIf { UUID_PATTERN.matches(it) }
+                ?.let { UUID.fromString(it).toString() }
+            if (deviceId == null) {
+                call.respondHtml(HttpStatusCode.BadRequest, ConsoleViews.error(400, "device id must be a uuid"))
+                return@post
+            }
+            val params = call.receiveParameters()
+            val household = params["household"]
+                ?.takeIf { UUID_PATTERN.matches(it) }
+                ?.let { UUID.fromString(it).toString() }
+            if (household == null) {
+                call.respondHtml(HttpStatusCode.BadRequest, ConsoleViews.error(400, "household is required and must be a uuid"))
+                return@post
+            }
+            val type = params["type"].orEmpty()
+            when (val result = diag.send(admin.adminId, deviceId, household, type, JsonObject(emptyMap()))) {
+                is DiagSender.Result.Accepted -> call.respondHtml(
+                    HttpStatusCode.Accepted,
+                    ConsoleViews.diagAccepted(result.taskId, result.trace, result.state, deviceId),
+                )
+
+                is DiagSender.Result.Refused -> call.respondHtml(
+                    result.status,
+                    ConsoleViews.error(result.status.value, result.message),
+                )
+            }
+        }
+    }
+}
+
+/** The console session: the opaque admin token held in the `hopa_admin` cookie. */
+private fun ApplicationCall.consoleIdentity(config: ServerConfig): AdminIdentity? {
+    val token = request.cookies["hopa_admin"]?.takeIf { it.isNotEmpty() }
+    return token?.let { config.adminAuth?.adminFor(it) }
+}
+
+/** Resolves the cookie identity, redirecting to the sign-in form when absent. */
+private suspend fun ApplicationCall.consoleAdminOrRedirect(config: ServerConfig): AdminIdentity? {
+    val identity = consoleIdentity(config)
+    if (identity == null) {
+        respondRedirect("/console/sign-in")
+    }
+    return identity
+}
+
+/** The `household` query parameter as a canonical uuid, or null. */
+private fun ApplicationCall.householdOrNull(): String? =
+    request.queryParameters["household"]
+        ?.takeIf { UUID_PATTERN.matches(it) }
+        ?.let { UUID.fromString(it).toString() }
+
+/** The device inventory of one household with live presence attached. */
+private fun ServerConfig.devicesFor(householdId: String): List<ConsoleDevice> {
+    val inventory = devices as? DeviceInventory ?: return emptyList()
+    return inventory.adminList(householdId).map { row ->
+        ConsoleDevice(
+            id = row.id,
+            platform = row.platform,
+            name = row.name,
+            lastSeenAt = row.lastSeenAt,
+            revokedAt = row.revokedAt,
+            online = registry.online(row.id),
+        )
+    }
+}

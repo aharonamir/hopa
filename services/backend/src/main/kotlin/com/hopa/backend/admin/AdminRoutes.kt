@@ -5,8 +5,6 @@ import com.hopa.backend.http.BodyTooLarge
 import com.hopa.backend.http.receiveBounded
 import com.hopa.backend.http.respondError
 import com.hopa.backend.store.DeviceInventory
-import com.hopa.backend.tasks.RouteResult
-import com.hopa.backend.tasks.TaskRouter
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -48,6 +46,7 @@ data class DiagAccepted(val taskId: String, val trace: String, val state: String
  */
 fun Application.adminRoutes(config: ServerConfig) {
     val inventory = config.devices as? DeviceInventory
+    val diag = DiagSender.from(config)
 
     routing {
         get("/v1/admin/devices") {
@@ -122,47 +121,23 @@ fun Application.adminRoutes(config: ServerConfig) {
                 return@post
             }
 
-            // The device lookup is also the tenancy check: it only sees the
-            // named household and hides a revoked device, so both answer the
-            // same refusal and no row is written.
-            val target = config.devices.lookup(deviceId, household)
-            // The directory is already tenant-scoped; comparing the returned
-            // household is a second, independent guard against a future
-            // directory implementation drifting from that contract.
-            if (target == null || target.householdId != household) {
-                call.respondError(
-                    HttpStatusCode.Forbidden,
-                    "E_TENANT",
-                    "no such live device in this household",
-                )
-                return@post
-            }
-
-            val router = TaskRouter(
-                store = config.tasks,
-                registry = config.registry,
-                devices = config.devices,
-                log = config.log,
-                push = config.push,
-                traces = config.traces,
-            )
             when (
-                val routed =
-                    router.createServerTask(admin.adminId, target, request.type, request.body ?: JsonObject(emptyMap()))
+                val result =
+                    diag.send(admin.adminId, deviceId, household, request.type, request.body ?: JsonObject(emptyMap()))
             ) {
-                is RouteResult.Accepted -> call.respond(
+                is DiagSender.Result.Accepted -> call.respond(
                     HttpStatusCode.Accepted,
                     DiagAccepted(
-                        taskId = routed.task.id,
-                        trace = routed.task.trace,
-                        state = routed.task.state,
+                        taskId = result.taskId,
+                        trace = result.trace,
+                        state = result.state,
                     ),
                 )
 
-                is RouteResult.Refused -> call.respondError(
-                    HttpStatusCode.BadRequest,
-                    routed.error.code,
-                    routed.error.message,
+                is DiagSender.Result.Refused -> call.respondError(
+                    result.status,
+                    result.code,
+                    result.message,
                 )
             }
         }

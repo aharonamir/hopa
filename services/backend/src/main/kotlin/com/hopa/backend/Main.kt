@@ -14,6 +14,7 @@ import com.hopa.backend.admin.adminRoutes
 import com.hopa.backend.admin.adminSessionRoutes
 import com.hopa.backend.admin.lookupRoutes
 import com.hopa.backend.auth.AuthPort
+import com.hopa.backend.console.consoleRoutes
 import com.hopa.backend.gateway.DeviceRegistry
 import com.hopa.backend.gateway.gatewayRoutes
 import com.hopa.backend.http.healthRoutes
@@ -67,6 +68,7 @@ fun Application.module(config: ServerConfig) {
     adminRoutes(config)
     adminSessionRoutes(config)
     lookupRoutes(config)
+    consoleRoutes(config)
     traceRoutes(config)
     gatewayRoutes(config)
 }
