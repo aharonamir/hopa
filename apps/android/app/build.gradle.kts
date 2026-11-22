@@ -20,6 +20,17 @@ val keystoreProperties = Properties().apply {
 val releaseKeystore = keystoreProperties.getProperty("storeFile")?.let { rootProject.file(it) }
 val hasReleaseSigning = releaseKeystore?.exists() == true
 
+// The gateway address is a developer override: debug reads it from
+// local.properties (key `hopa.backendUrl`), release always ships null. The file
+// is per-machine and never committed.
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties().apply {
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+val backendUrl = localProperties.getProperty("hopa.backendUrl")?.trim().orEmpty()
+
 android {
     namespace = "com.hopa.app"
     compileSdk = 37
@@ -60,6 +71,11 @@ android {
                 "proguard-rules.pro",
             )
             testProguardFiles("test-proguard-rules.pro")
+            buildConfigField(
+                "String",
+                "BACKEND_URL",
+                if (backendUrl.isBlank()) "null" else "\"$backendUrl\"",
+            )
         }
         release {
             isMinifyEnabled = true
@@ -69,6 +85,7 @@ android {
                 "proguard-rules.pro",
             )
             testProguardFiles("test-proguard-rules.pro")
+            buildConfigField("String", "BACKEND_URL", "null")
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {

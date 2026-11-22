@@ -13,6 +13,9 @@ sealed interface HopaDestination {
     data object Chat : HopaDestination
 
     @Serializable
+    data object SignIn : HopaDestination
+
+    @Serializable
     data object Settings : HopaDestination
 
     @Serializable

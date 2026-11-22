@@ -17,6 +17,7 @@ class FakeSettingsRepository(initial: AppSettings = AppSettings()) : SettingsRep
     private var accessToken: String = ""
     private var refreshToken: String = ""
     private var privateKey: String = ""
+    private var contentKey: String = ""
 
     override val settings: Flow<AppSettings> = state
 
@@ -66,9 +67,16 @@ class FakeSettingsRepository(initial: AppSettings = AppSettings()) : SettingsRep
         privateKey = value
     }
 
+    override suspend fun backendContentKey(): String = contentKey
+
+    override suspend fun setBackendContentKey(value: String) {
+        contentKey = value
+    }
+
     override suspend fun clearBackend() {
         accessToken = ""
         refreshToken = ""
         privateKey = ""
+        contentKey = ""
     }
 }

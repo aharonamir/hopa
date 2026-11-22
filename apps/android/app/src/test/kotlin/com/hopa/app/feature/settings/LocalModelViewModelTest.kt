@@ -177,6 +177,8 @@ class LocalModelViewModelTest {
             override suspend fun setBackendRefreshToken(value: String) = Unit
             override suspend fun backendPrivateKey(): String = ""
             override suspend fun setBackendPrivateKey(value: String) = Unit
+            override suspend fun backendContentKey(): String = ""
+            override suspend fun setBackendContentKey(value: String) = Unit
             override suspend fun clearBackend() = Unit
         }
 

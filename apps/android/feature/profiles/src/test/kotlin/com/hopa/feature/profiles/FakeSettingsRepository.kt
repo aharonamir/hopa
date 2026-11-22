@@ -43,5 +43,9 @@ class FakeSettingsRepository(initial: AppSettings = AppSettings()) : SettingsRep
 
     override suspend fun setBackendPrivateKey(value: String) = Unit
 
+    override suspend fun backendContentKey(): String = ""
+
+    override suspend fun setBackendContentKey(value: String) = Unit
+
     override suspend fun clearBackend() = Unit
 }

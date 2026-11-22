@@ -1,7 +1,7 @@
 package com.hopa.backend.accounts
 
 /**
- * Server-side E.164 normalization.
+ * E.164 normalization.
  *
  * The phone number is only ever a login lookup: it is normalized here, never
  * emitted on the wire, never put in a token and never logged. [normalize]

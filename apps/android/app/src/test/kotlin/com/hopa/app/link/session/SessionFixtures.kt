@@ -91,6 +91,7 @@ internal object SessionFixtures {
         private var access = ""
         private var refresh = ""
         private var privateKey = ""
+        private var contentKey = ""
 
         fun seed(
             url: String,
@@ -131,11 +132,14 @@ internal object SessionFixtures {
         override suspend fun setBackendRefreshToken(value: String) { refresh = value }
         override suspend fun backendPrivateKey(): String = privateKey
         override suspend fun setBackendPrivateKey(value: String) { privateKey = value }
+        override suspend fun backendContentKey(): String = contentKey
+        override suspend fun setBackendContentKey(value: String) { contentKey = value }
 
         override suspend fun clearBackend() {
             access = ""
             refresh = ""
             privateKey = ""
+            contentKey = ""
             _settings.value = _settings.value.copy(
                 backendUrl = "",
                 backendDeviceId = "",

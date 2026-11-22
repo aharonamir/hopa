@@ -1,11 +1,16 @@
 package com.hopa.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.hopa.app.BuildConfig
+import com.hopa.app.account.SignInRoute
 import com.hopa.app.di.AppContainer
+import com.hopa.backend.pairing.AccountClient
 import com.hopa.feature.browser.BrowserRoute
 import com.hopa.feature.execution.ComputerRoute
 import com.hopa.app.feature.execution.DecisionsRoute
@@ -28,11 +33,37 @@ import com.hopa.app.feature.settings.SettingsRoute
 import com.hopa.app.feature.shell.HomeShell
 import com.hopa.feature.skills.SkillsRoute
 import com.hopa.feature.usage.UsageRoute
+import kotlinx.coroutines.flow.first
+
+/** The launch decision plus the resolved gateway URL it was computed from. */
+private data class ResolvedLaunch(
+    val decision: LaunchDecision,
+    val gatewayUrl: String,
+)
 
 @Composable
 fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = HopaDestination.Chat) {
+    val launch by produceState<ResolvedLaunch?>(initialValue = null) {
+        val current = container.settings.settings.first()
+        val url = BuildConfig.BACKEND_URL?.takeIf { it.isNotBlank() } ?: current.backendUrl
+        value = ResolvedLaunch(
+            decision = resolveLaunch(
+                configuredUrl = BuildConfig.BACKEND_URL,
+                storedUrl = current.backendUrl,
+                storedDeviceId = current.backendDeviceId,
+                health = { gateway -> AccountClient(gateway).health() },
+            ),
+            gatewayUrl = url,
+        )
+    }
+    val resolved = launch ?: return
+    val startDestination = if (resolved.decision.mode == LaunchMode.SignIn) {
+        HopaDestination.SignIn
+    } else {
+        HopaDestination.Chat
+    }
+    NavHost(navController = navController, startDestination = startDestination) {
         composable<HopaDestination.Chat> {
             HomeShell(
                 container = container,
@@ -47,6 +78,18 @@ fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
                 onOpenActMode = { navController.navigate(HopaDestination.ActMode) },
                 onOpenBrowser = { navController.navigate(HopaDestination.Browser()) },
                 initialGoal = initialGoal,
+                banner = resolved.decision.banner,
+            )
+        }
+        composable<HopaDestination.SignIn> {
+            SignInRoute(
+                container = container,
+                gatewayUrl = resolved.gatewayUrl,
+                onSignedIn = {
+                    navController.navigate(HopaDestination.Chat) {
+                        popUpTo(HopaDestination.SignIn) { inclusive = true }
+                    }
+                },
             )
         }
         composable<HopaDestination.Usage> {
