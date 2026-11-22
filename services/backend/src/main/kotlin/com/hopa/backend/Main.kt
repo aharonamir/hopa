@@ -1,5 +1,6 @@
 package com.hopa.backend
 
+import com.hopa.backend.accounts.AdminSeed
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.admin.adminRoutes
 import com.hopa.backend.auth.AuthPort
@@ -72,6 +73,12 @@ fun main() {
     val database = Database.fromEnvironment()
     database?.migrate()
     if (database != null && adminLookups) database.applyAdminLookups()
+    database?.let { db ->
+        AdminSeed(db).upsertFromEnv(
+            System.getenv("HOPA_ADMIN_EMAIL"),
+            System.getenv("HOPA_ADMIN_PASSWORD"),
+        )
+    }
 
     val auth: PgAuth? = database?.let(::PgAuth)
     // The registry exists before the issuer: a reused refresh token must both

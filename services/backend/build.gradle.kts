@@ -16,6 +16,7 @@ sourceSets {
 }
 
 dependencies {
+    implementation(project(":backend"))
     implementation(project(":inference"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
