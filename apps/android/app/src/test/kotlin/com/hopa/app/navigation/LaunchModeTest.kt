@@ -1,7 +1,6 @@
 package com.hopa.app.navigation
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -12,7 +11,7 @@ class LaunchModeTest {
         val decision = LaunchMode.decide(configuredUrl = null, storedUrl = "", storedDeviceId = "", reachable = false)
 
         assertEquals(LaunchMode.LocalOnly, decision.mode)
-        assertEquals(true, decision.hidePairingEntry)
+        assertEquals(false, decision.showGatewayPairing)
         assertNull(decision.banner)
     }
 
@@ -27,7 +26,7 @@ class LaunchModeTest {
 
         assertEquals(LaunchMode.LocalOnlyUnreachable, decision.mode)
         assertNotNull(decision.banner)
-        assertFalse(decision.hidePairingEntry)
+        assertEquals(true, decision.showGatewayPairing)
     }
 
     @Test
@@ -40,6 +39,7 @@ class LaunchModeTest {
         )
 
         assertEquals(LaunchMode.SignIn, decision.mode)
+        assertEquals(true, decision.showGatewayPairing)
     }
 
     @Test
@@ -52,6 +52,7 @@ class LaunchModeTest {
         )
 
         assertEquals(LaunchMode.Paired, decision.mode)
+        assertEquals(true, decision.showGatewayPairing)
     }
 
     @Test

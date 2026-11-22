@@ -97,7 +97,14 @@ class AccountViewModel(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (refused: BackendPairingFailure.Refused) {
-            _state.update { it.copy(busy = false, error = AUTH_FAILED) }
+            // A throttled account is not an unreachable gateway and not a wrong
+            // phone or password: say so, never "unreachable".
+            _state.update {
+                it.copy(
+                    busy = false,
+                    error = if (refused.status == 429) RATE_LIMITED else AUTH_FAILED,
+                )
+            }
         } catch (unavailable: BackendPairingFailure.Unavailable) {
             _state.update { it.copy(busy = false, error = UNREACHABLE) }
         } catch (error: Exception) {
@@ -122,6 +129,7 @@ class AccountViewModel(
         const val PLATFORM = "android"
         const val ALG = "x25519"
         const val AUTH_FAILED = "Invalid phone or password."
+        const val RATE_LIMITED = "Too many attempts. Try again in a minute."
         const val UNREACHABLE = "The gateway is unreachable."
         const val GENERIC = "Something went wrong."
     }

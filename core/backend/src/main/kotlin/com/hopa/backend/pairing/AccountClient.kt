@@ -146,7 +146,6 @@ class AccountClient(
                 if (!it.isSuccessful) {
                     val message = scrub(refusal(it.code, text), secrets)
                     throw when {
-                        it.code == 429 -> BackendPairingFailure.Unavailable(message)
                         it.code in 400..499 -> BackendPairingFailure.Refused(it.code, message)
                         else -> BackendPairingFailure.Unavailable(message)
                     }

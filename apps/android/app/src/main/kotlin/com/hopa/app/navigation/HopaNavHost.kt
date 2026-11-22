@@ -1,8 +1,14 @@
 package com.hopa.app.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -11,6 +17,7 @@ import com.hopa.app.BuildConfig
 import com.hopa.app.account.SignInRoute
 import com.hopa.app.di.AppContainer
 import com.hopa.backend.pairing.AccountClient
+import com.hopa.ui.theme.HopaColor
 import com.hopa.feature.browser.BrowserRoute
 import com.hopa.feature.execution.ComputerRoute
 import com.hopa.app.feature.execution.DecisionsRoute
@@ -57,7 +64,11 @@ fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
             gatewayUrl = url,
         )
     }
-    val resolved = launch ?: return
+    val resolved = launch
+    if (resolved == null) {
+        LaunchLoading()
+        return
+    }
     val startDestination = if (resolved.decision.mode == LaunchMode.SignIn) {
         HopaDestination.SignIn
     } else {
@@ -174,6 +185,7 @@ fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
         composable<HopaDestination.Computer> {
             ComputerRoute(
                 onBack = { navController.popBackStack() },
+                showGatewayPairing = resolved.decision.showGatewayPairing,
             )
         }
         composable<HopaDestination.SelfCheck> {
@@ -218,5 +230,18 @@ fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
                 onOpenScreenAccess = { navController.navigate(HopaDestination.Accessibility) },
             )
         }
+    }
+}
+
+/** Shown while the launch probe runs, instead of a blank frame. */
+@Composable
+private fun LaunchLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HopaColor.Bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(color = HopaColor.Primary)
     }
 }

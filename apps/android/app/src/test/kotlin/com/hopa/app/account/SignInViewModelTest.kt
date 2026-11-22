@@ -113,6 +113,32 @@ class SignInViewModelTest {
     }
 
     @Test
+    fun `a rate limited sign in is never shown as unreachable`() = runTest(dispatcher) {
+        val server = server(
+            MockResponse().setResponseCode(429)
+                .setBody("""{"code":"E_RATE","message":"too many attempts"}"""),
+        )
+        try {
+            val settings = FakeSettings()
+            val viewModel = AccountViewModel(
+                settings = settings,
+                gatewayUrl = server.url("/").toString(),
+                accountClient = { AccountClient(it, dispatcher = dispatcher) },
+            )
+
+            viewModel.signIn("+972501234567", "pw")
+            advanceUntilIdle()
+
+            assertEquals("Too many attempts. Try again in a minute.", viewModel.state.value.error)
+            assertFalse(viewModel.state.value.error!!.contains("unreachable"))
+            assertFalse(viewModel.state.value.error!!.contains("972"))
+            assertEquals(false, viewModel.state.value.signedIn)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `sign in stores identity and tokens but never a content key`() = runTest(dispatcher) {
         val server = server(MockResponse().setResponseCode(201).setBody(accountResponse()))
         try {

@@ -53,8 +53,12 @@ data class LaunchDecision(
     val mode: LaunchMode,
     val banner: String? = null,
 ) {
-    /** Only the no-gateway-at-all case hides the pairing entry. */
-    val hidePairingEntry: Boolean get() = mode == LaunchMode.LocalOnly
+    /**
+     * Whether the gateway pairing card should be shown. It is hidden only in
+     * the no-gateway-at-all case; the unreachable case keeps it so the person
+     * can retry.
+     */
+    val showGatewayPairing: Boolean get() = mode != LaunchMode.LocalOnly
 }
 
 /**
