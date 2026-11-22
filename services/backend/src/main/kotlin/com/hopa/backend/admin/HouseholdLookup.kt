@@ -48,20 +48,14 @@ class HouseholdLookup(
 
         if (!UUID_PATTERN.matches(q)) return emptyList()
 
-        // A uuid resolves as a member first, then as a household. Neither
-        // definer function reads `accounts`, so the access line is written once
-        // the kind is known and always before the accounts enrichment.
-        resolveMember(q)?.let { resolved ->
-            pii(adminId, "member", q)
-            return listOf(enrich(resolved))
-        }
-        resolveHousehold(q)?.let { resolved ->
-            pii(adminId, "household", q)
-            return listOf(enrich(resolved))
-        }
-        // A well-formed uuid with no member/household row is still a usable
-        // query: log the primary attempt and answer [].
-        pii(adminId, "member", q)
+        // A uuid-shaped query does not know whether it is a member or a
+        // household before resolution, so the access line records `query_kind =
+        // "uuid"` regardless of which resolver matches. The definer functions
+        // read only `members` (never `accounts`), so the line is written once,
+        // before any accounts read.
+        pii(adminId, "uuid", q)
+        resolveMember(q)?.let { resolved -> return listOf(enrich(resolved)) }
+        resolveHousehold(q)?.let { resolved -> return listOf(enrich(resolved)) }
         return emptyList()
     }
 
@@ -105,40 +99,41 @@ class HouseholdLookup(
     /**
      * The account read. `accounts` is a global table, so it is read in
      * [Database.read] with no tenant GUC; the phone never comes from a tenant
-     * table.
+     * table. A tombstoned account is skipped exactly like `admin_resolve_phone`
+     * does: a member whose account has a `deleted_at` renders no phone, no
+     * verified state and `accountStatus = "none"`.
      */
     private fun enrich(resolved: Resolved): LookupRow {
-        val accountId = resolved.accountId
-        if (accountId == null) {
-            // An operator-paired member has no account: no phone, unverified.
-            return LookupRow(
-                householdId = resolved.householdId,
-                memberId = resolved.memberId,
-                displayName = resolved.displayName,
-                phone = null,
-                verified = false,
-                accountStatus = "none",
-            )
-        }
-        val (phone, verified) = db.read { connection ->
+        val accountId = resolved.accountId ?: return none(resolved)
+        val account = db.read { connection ->
             connection.prepareStatement(
-                "select phone, verified_at from accounts where id = ?::uuid",
+                "select phone, verified_at from accounts where id = ?::uuid and deleted_at is null",
             ).use { statement ->
                 statement.setString(1, accountId)
                 statement.executeQuery().use { rows ->
-                    if (rows.next()) rows.getString(1) to (rows.getTimestamp(2) != null) else null to false
+                    if (rows.next()) AccountView(rows.getString(1), rows.getTimestamp(2) != null) else null
                 }
             }
-        }
+        } ?: return none(resolved)
         return LookupRow(
             householdId = resolved.householdId,
             memberId = resolved.memberId,
             displayName = resolved.displayName,
-            phone = phone,
-            verified = verified,
-            accountStatus = if (verified) "verified" else "unverified",
+            phone = account.phone,
+            verified = account.verified,
+            accountStatus = if (account.verified) "verified" else "unverified",
         )
     }
+
+    /** No live account behind the member: no phone, no verified state. */
+    private fun none(resolved: Resolved): LookupRow = LookupRow(
+        householdId = resolved.householdId,
+        memberId = resolved.memberId,
+        displayName = resolved.displayName,
+        phone = null,
+        verified = false,
+        accountStatus = "none",
+    )
 
     private fun pii(adminId: String, kind: String, query: String) {
         log.event(
@@ -157,4 +152,6 @@ class HouseholdLookup(
         val displayName: String,
         val accountId: String?,
     )
+
+    private data class AccountView(val phone: String, val verified: Boolean)
 }

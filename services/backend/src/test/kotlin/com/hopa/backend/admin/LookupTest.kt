@@ -315,6 +315,33 @@ class LookupTest {
     }
 
     @Test
+    fun `a tombstoned account is hidden on member and phone lookups`() = testApplication {
+        val fixture = seedAccountHousehold()
+        db.read { connection ->
+            connection.prepareStatement(
+                "update accounts set deleted_at = now() where id = ?::uuid",
+            ).use {
+                it.setString(1, fixture.accountId)
+                assertEquals(1, it.executeUpdate())
+            }
+        }
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val memberResponse = client.lookup(admin.token, fixture.memberId)
+        assertEquals(HttpStatusCode.OK, memberResponse.status)
+        val row = Json.parseToJsonElement(memberResponse.bodyAsText()).jsonArray.single().jsonObject
+        assertEquals(fixture.memberId, row["memberId"]!!.jsonPrimitive.content)
+        assertEquals(null, row["phone"])
+        assertEquals(false, row["verified"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals("none", row["accountStatus"]!!.jsonPrimitive.content)
+
+        val phoneResponse = client.lookup(admin.token, fixture.phone)
+        assertEquals(HttpStatusCode.OK, phoneResponse.status)
+        assertEquals(0, Json.parseToJsonElement(phoneResponse.bodyAsText()).jsonArray.size)
+    }
+
+    @Test
     fun `a well-formed but unknown uuid returns an empty array`() = testApplication {
         val admin = seedAdminSession()
         application { module(config()) }
@@ -325,7 +352,7 @@ class LookupTest {
     }
 
     @Test
-    fun `a missing or malformed query is E_SCHEMA`() = testApplication {
+    fun `a missing, blank or malformed query is E_SCHEMA and logs nothing`() = testApplication {
         val admin = seedAdminSession()
         application { module(config()) }
 
@@ -333,9 +360,15 @@ class LookupTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertEquals("E_SCHEMA", code(response.bodyAsText()))
 
+        response = client.lookup(admin.token, "   ")
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals("E_SCHEMA", code(response.bodyAsText()))
+
         response = client.lookup(admin.token, "not-a-phone-or-uuid")
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertEquals("E_SCHEMA", code(response.bodyAsText()))
+
+        assertTrue(piiReads().isEmpty(), "a refused query must not write a PII line")
     }
 
     @Test
@@ -379,8 +412,8 @@ class LookupTest {
                 assertEquals(admin.id, read.second["admin_id"])
             }
             assertEquals("phone", reads[0].second["query_kind"])
-            assertEquals("member", reads[1].second["query_kind"])
-            assertEquals("household", reads[2].second["query_kind"])
+            assertEquals("uuid", reads[1].second["query_kind"])
+            assertEquals("uuid", reads[2].second["query_kind"])
             assertEquals(hash16(fixture.phone), reads[0].second["query_hash"])
             assertEquals(hash16(fixture.memberId), reads[1].second["query_hash"])
             assertEquals(hash16(fixture.householdId), reads[2].second["query_hash"])
