@@ -458,4 +458,44 @@ class ConsoleTest {
         )
         assertEquals(HttpStatusCode.NotFound, response.status)
     }
+
+    @Test
+    fun `sign-in rejects a cross-site Origin`() = testApplication {
+        val email = "admin-${UUID.randomUUID()}@hopa.test"
+        val password = "correct horse battery staple"
+        seedAdmin(email, password)
+        application { module(config()) }
+
+        val response = client.submitForm(
+            url = "/console/sign-in",
+            formParameters = Parameters.build {
+                append("email", email)
+                append("password", password)
+            },
+        ) {
+            header("Origin", "https://evil.example")
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertFalse(
+            response.headers.contains(HttpHeaders.SetCookie),
+            "a cross-site sign-in must not set the admin cookie",
+        )
+    }
+
+    @Test
+    fun `an oversized sign-in form is refused with 413`() = testApplication {
+        val email = "admin-${UUID.randomUUID()}@hopa.test"
+        application { module(config()) }
+
+        val response = client.submitForm(
+            url = "/console/sign-in",
+            formParameters = Parameters.build {
+                append("email", "a".repeat(70_000))
+                append("password", "x")
+            },
+        )
+
+        assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+    }
 }

@@ -41,7 +41,6 @@ import com.hopa.app.feature.settings.SettingsRoute
 import com.hopa.app.feature.shell.HomeShell
 import com.hopa.feature.skills.SkillsRoute
 import com.hopa.feature.usage.UsageRoute
-import kotlinx.coroutines.flow.first
 
 /** The launch decision plus the resolved gateway URL it was computed from. */
 private data class ResolvedLaunch(
@@ -53,17 +52,27 @@ private data class ResolvedLaunch(
 fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
     val navController = rememberNavController()
     val launch by produceState<ResolvedLaunch?>(initialValue = null) {
-        val current = container.settings.settings.first()
-        val url = BuildConfig.BACKEND_URL?.takeIf { it.isNotBlank() } ?: current.backendUrl
-        value = ResolvedLaunch(
-            decision = resolveLaunch(
-                configuredUrl = BuildConfig.BACKEND_URL,
-                storedUrl = current.backendUrl,
-                storedDeviceId = current.backendDeviceId,
-                health = { gateway -> AccountClient(gateway).health() },
-            ),
-            gatewayUrl = url,
-        )
+        var lastUrl: String? = null
+        var lastDeviceId: String? = null
+        container.settings.settings.collect { current ->
+            // Re-decide only when the gateway or identity changes; every other
+            // settings emission (mascot, model, …) must not re-run the probe.
+            if (value != null && current.backendUrl == lastUrl && current.backendDeviceId == lastDeviceId) {
+                return@collect
+            }
+            lastUrl = current.backendUrl
+            lastDeviceId = current.backendDeviceId
+            val url = BuildConfig.BACKEND_URL?.takeIf { it.isNotBlank() } ?: current.backendUrl
+            value = ResolvedLaunch(
+                decision = resolveLaunch(
+                    configuredUrl = BuildConfig.BACKEND_URL,
+                    storedUrl = current.backendUrl,
+                    storedDeviceId = current.backendDeviceId,
+                    health = { gateway -> AccountClient(gateway).health() },
+                ),
+                gatewayUrl = url,
+            )
+        }
     }
     val resolved = launch
     if (resolved == null) {

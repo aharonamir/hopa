@@ -406,6 +406,13 @@ class AccountService(
             }
         }
 
+    /**
+     * Resolves the account's household of one through `admin_resolve_phone`, which
+     * returns the account's first member row by `created_at`. Correct while every
+     * account has exactly one household of one; once week-4 invites attach an
+     * account to a second household, this must let the device choose a household
+     * instead of silently binding to the first member row.
+     */
     private fun resolveLocation(phone: String): HouseholdLocation? =
         db.read { connection ->
             connection.prepareStatement(

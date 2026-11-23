@@ -49,7 +49,7 @@ class AdminSessions(
         if (!ipLimiter.allow(remoteAddress)) {
             return AdminSessionOutcome.Refused("E_RATE", RATE_LIMITED, retryable = true)
         }
-        val normalizedEmail = email.trim()
+        val normalizedEmail = email.trim().lowercase()
         if (normalizedEmail.isEmpty()) {
             return AdminSessionOutcome.Refused("E_SCHEMA", "email must not be blank")
         }

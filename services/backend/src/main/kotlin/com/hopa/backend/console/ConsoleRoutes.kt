@@ -6,6 +6,9 @@ import com.hopa.backend.admin.AdminIdentity
 import com.hopa.backend.admin.AdminSessionOutcome
 import com.hopa.backend.admin.DiagSender
 import com.hopa.backend.admin.UUID_PATTERN
+import com.hopa.backend.http.BodyTooLarge
+import com.hopa.backend.http.receiveBoundedParameters
+import com.hopa.backend.http.respondError
 import com.hopa.backend.pairing.remoteAddress
 import com.hopa.backend.store.DeviceInventory
 import io.ktor.http.Cookie
@@ -15,7 +18,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.html.respondHtml
-import io.ktor.server.request.receiveParameters
+import io.ktor.server.request.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.get
@@ -46,7 +49,23 @@ fun Application.consoleRoutes(config: ServerConfig) {
                 call.respondHtml(HttpStatusCode.Unauthorized, ConsoleViews.signIn(error = true))
                 return@post
             }
-            val params = call.receiveParameters()
+            // Login CSRF: a cross-site form POST could otherwise sign this
+            // browser into the attacker's admin account. Reject when a browser
+            // Origin names a different host than the one this request reached.
+            if (call.crossSite()) {
+                call.respond(HttpStatusCode.Forbidden)
+                return@post
+            }
+            val params = try {
+                call.receiveBoundedParameters()
+            } catch (_: BodyTooLarge) {
+                call.respondError(
+                    HttpStatusCode.PayloadTooLarge,
+                    "E_SCHEMA",
+                    "request body is larger than 64 KiB",
+                )
+                return@post
+            }
             val email = params["email"].orEmpty()
             val password = params["password"].orEmpty()
             when (val outcome = sessions.signIn(email, password, remoteAddress(call))) {
@@ -164,7 +183,16 @@ fun Application.consoleRoutes(config: ServerConfig) {
                 call.respondHtml(HttpStatusCode.BadRequest, ConsoleViews.error(400, "device id must be a uuid"))
                 return@post
             }
-            val params = call.receiveParameters()
+            val params = try {
+                call.receiveBoundedParameters()
+            } catch (_: BodyTooLarge) {
+                call.respondError(
+                    HttpStatusCode.PayloadTooLarge,
+                    "E_SCHEMA",
+                    "request body is larger than 64 KiB",
+                )
+                return@post
+            }
             val household = params["household"]
                 ?.takeIf { UUID_PATTERN.matches(it) }
                 ?.let { UUID.fromString(it).toString() }
@@ -222,6 +250,21 @@ private fun ApplicationCall.householdOrNull(): String? =
     request.queryParameters["household"]
         ?.takeIf { UUID_PATTERN.matches(it) }
         ?.let { UUID.fromString(it).toString() }
+
+/**
+ * True when the request carries an `Origin` whose host differs from the host it
+ * reached. Browsers send `Origin` on cross-site form POSTs; a matching or absent
+ * Origin (curl, tests) is not cross-site. The console is browser-only, so this is
+ * the login-CSRF guard.
+ */
+private fun ApplicationCall.crossSite(): Boolean {
+    val origin = request.header(HttpHeaders.Origin) ?: return false
+    val originHost = runCatching { java.net.URI(origin).host }.getOrNull() ?: return false
+    // A browser always sends Host; fall back to the local bind only for engines
+    // (like the test host) that do not set it.
+    val requestHost = request.header(HttpHeaders.Host)?.substringBefore(':') ?: request.local.serverHost
+    return !originHost.equals(requestHost, ignoreCase = true)
+}
 
 /** The device inventory of one household with live presence attached. */
 private fun ServerConfig.devicesFor(householdId: String): List<ConsoleDevice> {

@@ -1,5 +1,7 @@
 package com.hopa.backend.http
 
+import io.ktor.http.Parameters
+import io.ktor.http.parseQueryString
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.receiveChannel
@@ -30,4 +32,20 @@ suspend fun <T> ApplicationCall.receiveBounded(
     val bytes = packet.readByteArray()
     if (bytes.size > maxBytes) throw BodyTooLarge()
     return httpJson.decodeFromString(serializer, bytes.decodeToString())
+}
+
+/**
+ * Reads a `application/x-www-form-urlencoded` body with the same hard cap as
+ * [receiveBounded]. The console forms post URL-encoded bodies; without this,
+ * `receiveParameters` would buffer an arbitrarily large unauthenticated body.
+ */
+suspend fun ApplicationCall.receiveBoundedParameters(
+    maxBytes: Int = MAX_HTTP_BODY_BYTES,
+): Parameters {
+    val declared = request.contentLength()
+    if (declared != null && declared > maxBytes) throw BodyTooLarge()
+    val packet = receiveChannel().readRemaining(maxBytes.toLong() + 1)
+    val bytes = packet.readByteArray()
+    if (bytes.size > maxBytes) throw BodyTooLarge()
+    return parseQueryString(bytes.decodeToString())
 }

@@ -260,6 +260,17 @@ class LookupTest {
     }
 
     @Test
+    fun `admin sign-in is case-insensitive on email`() = testApplication {
+        val email = "admin-${UUID.randomUUID()}@hopa.test"
+        val password = "correct horse battery staple"
+        seedAdmin(email, password)
+        application { module(config()) }
+
+        val ok = client.signIn(email.uppercase(), password)
+        assertEquals(HttpStatusCode.Created, ok.status)
+    }
+
+    @Test
     fun `the sixth sign-in attempt is E_RATE`() = testApplication {
         val email = "admin-${UUID.randomUUID()}@hopa.test"
         seedAdmin(email, "correct horse battery staple")

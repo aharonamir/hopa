@@ -92,6 +92,16 @@ class AccountsUtilTest {
         assertEquals(0, adminCount(email), "a blank env value must leave the table untouched")
     }
 
+    @Test
+    fun `admin seed stores the email lowercased`() {
+        val email = "Seed-${UUID.randomUUID()}@Hopa.Test"
+
+        AdminSeed(db).upsertFromEnv(email, "a-password")
+
+        assertEquals(1, adminCount(email.lowercase()), "the seed must store the email lowercased")
+        assertEquals(0, adminCount(email), "the mixed-case email must not be stored")
+    }
+
     private fun adminCount(email: String): Int =
         db.read { connection ->
             connection.prepareStatement("select count(*) from admins where email = ?").use {

@@ -16,7 +16,7 @@ import java.util.UUID
  */
 class AdminSeed(private val db: Database) {
     fun upsertFromEnv(email: String?, password: String?) {
-        val adminEmail = email ?: return
+        val adminEmail = email?.trim()?.lowercase() ?: return
         if (adminEmail.isBlank()) return
         val adminPassword = password ?: return
         if (adminPassword.isBlank()) return
