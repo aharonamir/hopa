@@ -277,8 +277,10 @@ Every box is a change, a test or an artifact, not a meeting. Slices:
 - [x] Testcontainers: migration applies fresh and idempotent; app-role reads of
       `household_key_wraps` outside the tenant return zero rows; definer functions
       return exactly their minimum columns. *(`V2SchemaTest`, 10 tests.)*
-- [ ] E.164 normalization + argon2id hashing utilities with unit tests.
-- [ ] Admin seed from `HOPA_ADMIN_EMAIL`/`HOPA_ADMIN_PASSWORD` at boot, upsert.
+- [x] E.164 normalization + argon2id hashing utilities with unit tests.
+      *(Lane B Task 2, `c2d33f9a`; `AccountsUtilTest`.)*
+- [x] Admin seed from `HOPA_ADMIN_EMAIL`/`HOPA_ADMIN_PASSWORD` at boot, upsert.
+      *(Lane B Task 2, `c2d33f9a`.)*
 
 ### W2.2 Key wrapping — Monday/Tuesday
 
@@ -289,13 +291,15 @@ Every box is a change, a test or an artifact, not a meeting. Slices:
 
 ### W2.3 Accounts and sessions — Tuesday
 
-- [ ] `POST /v1/accounts` and `POST /v1/session` per §4; uniform `E_AUTH`; rate
+- [x] `POST /v1/accounts` and `POST /v1/session` per §4; uniform `E_AUTH`; rate
       limits per IP and per phone; `spec/openapi/backend.v1.yaml` updated in the
-      same PR.
-- [ ] `POST /v1/session/otp` + `/verify` behind `HOPA_SMS_ENABLED` with the
-      log-only `SmsPort`; clash policy test.
-- [ ] Integration: sign-up creates account + household + member + device + own
-      wrap in one transaction (failure leaves nothing).
+      same PR. *(Lane B Task 3, `5d671046`; `AccountRoutesTest`.)*
+- [x] `POST /v1/session/otp` + `/verify` behind `HOPA_SMS_ENABLED` with the
+      log-only `SmsPort`; clash policy test. *(Lane B Task 4, `a1b9a366`;
+      `OtpTest`.)*
+- [x] Integration: sign-up creates account + household + member + device + own
+      wrap in one transaction (failure leaves nothing). *(Lane B Task 3;
+      trigger-forced rollback in `AccountRoutesTest`.)*
 
 ### W2.4 Admission — Tuesday/Wednesday
 
@@ -313,16 +317,19 @@ Every box is a change, a test or an artifact, not a meeting. Slices:
       Task 5, `6523d033`, `d436b8ca`, `46cdd1b8`; hard cut on reuse in `99416bd4`.)*
 - [x] `GET /v1/admin/devices?household=` (live presence) — lane A Task 6, `92272bd2`,
       now read through `admin_list_devices` (`809c97e2`).
-- [ ] `POST /v1/admin/session` and `GET /v1/admin/households?query=` with the
-      access log on every phone-number read — **lane B Task 5**.
+- [x] `POST /v1/admin/session` and `GET /v1/admin/households?query=` with the
+      access log on every phone-number read. *(Lane B Task 5, `3fb56b2c`/`70fe854b`;
+      `LookupTest`; V5 extends the member/household resolvers with `account_id`.)*
 - [x] `diag.ping/state/reset` in the validator; server-authored tasks through
       `TaskRouter`; audit row names the admin. *(Lane A Task 6, `92272bd2`/`400126b1`.)*
 
 ### W2.6 Console — Wednesday/Thursday
 
-- [ ] Admin sign-in page, health page, household & device lookup page (member-id,
-      household-id, phone, connected devices), diag sender button (last).
-- [ ] No conversation contents anywhere in the console (asserted by test).
+- [x] Admin sign-in page, health page, household & device lookup page (member-id,
+      household-id, phone, connected devices), diag sender button. *(Lane B Task 6,
+      `e29fd206`/`85eb5e43`; `ConsoleTest`.)*
+- [x] No conversation contents anywhere in the console (asserted by test).
+      *(`ConsoleTest` sentinel scan of every route.)*
 
 ### W2.7 Clients — Thursday/Friday
 
@@ -331,14 +338,105 @@ Every box is a change, a test or an artifact, not a meeting. Slices:
       credentials stored, gateway envelopes both directions. *(Lane A Tasks 7–8,
       `2e2914e2`, `93272f03`, `8d059231`, `60a1e3be`, `9c0176c0`; entry point
       `--pair-backend`/`backend.pair` in `e3c9be38`.)*
-- [ ] Android: sign-in screen, local-only mode when `backendUrl` is null, debug
+- [x] Android: sign-in screen, local-only mode when `backendUrl` is null, debug
       `buildConfigField` from `local.properties`, camera QR scanner with paste
-      fallback, vouch sends the wrapped key.
+      fallback, vouch sends the wrapped key. *(Lane B Tasks 7–8, `1b994122`,
+      `d3f1cf07`, `2695a52d`, `7db884c5`; the manual camera run is still pending.)*
 
 ### W2.8 Evidence — Friday
 
 - [ ] `docs/project/evidence/B2-accounts.md` records §8 with commands, trace ids
       and timestamps; `python tools/scripts/plan-status.py --plan
       docs/project/plan/backend` stays green.
-- [ ] `services/backend/README.md` rewritten to match the shipped Kotlin/Ktor
-      service (it still sketches a Python layout).
+- [x] `services/backend/README.md` rewritten to match the shipped Kotlin/Ktor
+      service. *(Lane B Task 9, `8c4eec3b`; no Python sketch remains.)*
+
+## 11. Lane B execution record (23 Nov 2026)
+
+Lane B ran subagent-driven on `backend-week2-B`, stacked on `backend-week2-A`
+(BASE `450f65b4`): one implementer per plan task, a fresh task reviewer per diff,
+and one scoped re-review per fix round. Task 1 was already delivered by lane A and
+was verified rather than re-run. Sync v0 stays outside this slice per the
+[`week2b.md`](tasks/week2b.md) boundary; it becomes `tasks/week2-sync.md`.
+
+### 11.1 Task status
+
+| Plan task | Commit(s) | Review |
+|---|---|---|
+| 1. V2 migration | lane A `68bfb7d1`, V3/V4 | satisfied by lane A; verified |
+| 2. E.164, argon2, admin seed | `c2d33f9a` | approved, no fix |
+| 3. Sign-up and sign-in | `5d671046` | approved, no fix |
+| 4. Optional SMS OTP | `a1b9a366` | approved, no fix |
+| 5. Admin session and lookup | `3fb56b2c`, `70fe854b` | fix round 1 (tombstoned accounts, query kind) |
+| 6. Console pages | `e29fd206`, `85eb5e43` | fix round 1 (console catch-all) |
+| 7. Android sign-in and modes | `1b994122`, `d3f1cf07` | fix round 1 (429 message, pairing entry) |
+| 8. Android scan and vouch | `2695a52d`, `7db884c5`, `7b3b5642` | fix round 1 (non-pending states, ktlint) |
+| 9. README and evidence skeleton | `8c4eec3b` | approved, no fix |
+| 10. Review follow-ups | `99f7e39f` | approved, no fix |
+
+### 11.2 Decisions taken during execution
+
+- The phone is normalized in one shared place: `Phones` moved to `core/backend`
+  under the same package; sign-up, sign-in and OTP all use it.
+- Sign-up's tombstoned-phone refusal is carried by the service (any row with the
+  phone), while V2's partial unique index stays as the race backstop.
+- OTP verify for an unknown phone creates a verified household-of-one with a
+  throwaway password hash and no wrap; the flag stays false by default.
+- Admin lookup by member/household needed the account id, so `V5__admin_account_id.sql`
+  extends the two resolvers; `accounts` is then read by id in the admin path.
+- Admin PII logging records `query_kind` and a truncated SHA-256 of the query, never
+  the phone or uuid (exit check #9 forbids phones in logs).
+- The console calls the same services as the JSON routes, is cookie-gated, and
+  renders text nodes only; unknown `/console*` paths redirect unauthenticated callers.
+- Android keeps two modes; an unreachable gateway degrades to local-only with a
+  banner, and the gateway pairing card hides only when no gateway is configured.
+- The scan confirm refuses non-`pending` sessions (the server reports
+  expired/claimed/vouched as 200 with a `state`, not `E_SCHEMA`).
+- Android acks a delivered `diag.*` on the link it arrived on; the sidecar refuses a
+  second concurrent `backend.pair` with `ok=false, error="already pairing"`.
+
+### 11.3 Review findings that changed the code
+
+- Task 5: a tombstoned account still disclosed phone/verified on member and household
+  lookups; the account read now filters `deleted_at` and falls back to status `none`.
+- Task 6: unknown `/console/*` sub-paths answered 404 instead of the required 302 for
+  unauthenticated callers; a trailing catch-all now handles them.
+- Task 7: a 429 was shown as "gateway unreachable" and `hidePairingEntry` was never
+  wired; 429 now has its own message and the card is threaded from the launch decision.
+- Task 8: expired/claimed sessions still reached the confirm screen; the state is now
+  checked first and the test uses the server's real 200-with-state response.
+
+### 11.4 Deferred and parked
+
+- Manual/deployed exit checks 1, 3, the manual part of 2 and 9 remain unproven; the
+  evidence file's rows stay unticked.
+- Parked minors for the final review: concurrent duplicate sign-up can still surface a
+  500 instead of `E_AUTH`; Unicode digits pass `Phones`; admin email is
+  case-sensitive; sign-in spans three transactions; `ScanScreen`/`AccountViewModel`
+  use `remember`; the unreachable banner can overlap the top bar.
+- Sync v0 is not in this slice (its mini-design and implementation remain week 3 work).
+
+### 11.5 Verification at `99f7e39f`
+
+| Command | Result |
+|---|---|
+| `apps\android\gradlew.bat -p services/backend :test --rerun-tasks` | 219 tests, 0 failures |
+| `apps\android\gradlew.bat -p apps/android :backend:test --rerun-tasks` | 97 tests, 0 failures |
+| `apps\android\gradlew.bat -p apps/android :app:testDebugUnitTest --rerun-tasks` | 89 tests, 0 failures |
+| `apps\android\gradlew.bat -p apps/windows/sidecar test --rerun-tasks` | 44 tests, 0 failures |
+| `py -3 tools/checks/check-links.py` | 0 broken links |
+| `python tools/scripts/plan-status.py --plan docs/project/plan/backend` | green |
+
+### 11.6 Exit-check status
+
+| # | Status |
+|---|---|
+| 1 | pending: deployed round-trip with timestamps |
+| 2 | automated half proven (`DeviceRevokeTest`, `TokenRotationTest`); manual timing pending |
+| 3 | pending: real camera scan + encrypted task each way |
+| 4 | proven (`AccountRoutesTest`) |
+| 5 | proven (`OtpTest`) |
+| 6 | proven (`LookupTest`, `ConsoleTest`) |
+| 7 | automated half proven (`DiagSendTest`); device-level ack proven by `BackendSessionTest`; deployed arrival pending |
+| 8 | proven (`TenantIsolationTest`, 1,000 attempts) |
+| 9 | pending: grep of the deployed week's logs |
