@@ -69,6 +69,7 @@ Service documentation lives with the services: [`services/docs/`](../services/do
 | [plan/windows/README.md](project/plan/windows/README.md) | How will the Windows client be built? |
 | [plan/backend/README.md](project/plan/backend/README.md) | How is the backend built, week by week? (week 1 planned) |
 | [evidence/B1-gateway.md](project/evidence/B1-gateway.md) | What proves the week-1 gateway works, and what is deferred? |
+| [evidence/B2-accounts.md](project/evidence/B2-accounts.md) | What proves the week-2 accounts, admission and console work, and what is deferred? |
 | [status.md](project/status.md) | Where the daily experience stands, and known debts |
 | [operations/release.md](project/operations/release.md) | How is a release cut? |
 | [operations/versioning.md](project/operations/versioning.md) | How are versions numbered? |
