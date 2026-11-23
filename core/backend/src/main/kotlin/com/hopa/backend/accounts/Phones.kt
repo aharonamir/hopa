@@ -6,9 +6,10 @@ package com.hopa.backend.accounts
  * The phone number is only ever a login lookup: it is normalized here, never
  * emitted on the wire, never put in a token and never logged. [normalize]
  * accepts a leading `+` or a leading `00` (both mean "international"), spaces
- * and dashes anywhere, and returns `+<digits>` when the result is 8-15 digits,
- * or null for anything else -- including letters, an empty string, or more
- * than one leading plus.
+ * and dashes anywhere, and returns `+<digits>` when the result is 8-15 ASCII
+ * digits, or null for anything else -- including letters, non-ASCII digits
+ * (Unicode digit forms are not valid E.164), an empty string, or more than one
+ * leading plus.
  */
 object Phones {
     fun normalize(raw: String?): String? {
@@ -22,7 +23,9 @@ object Phones {
         }
         val digits = text.filter { it != ' ' && it != '-' }
         if (digits.isEmpty()) return null
-        if (digits.any { !it.isDigit() }) return null
+        // E.164 digits are ASCII only; Unicode digit forms (Arabic-Indic,
+        // Devanagari, full-width, ...) are not a phone number and must not pass.
+        if (digits.any { it !in '0'..'9' }) return null
         if (digits.length !in 8..15) return null
         return "+$digits"
     }

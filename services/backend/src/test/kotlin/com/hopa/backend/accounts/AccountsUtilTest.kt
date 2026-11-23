@@ -35,6 +35,15 @@ class AccountsUtilTest {
     }
 
     @Test
+    fun `phones reject non ASCII digits`() {
+        // Arabic-Indic and Devanagari digits are Unicode digits but are not
+        // valid E.164; only ASCII '0'..'9' count as a phone number.
+        assertNull(Phones.normalize("\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668"))
+        assertNull(Phones.normalize("\u0967\u0968\u0969\u096A\u096B\u096C\u096D\u096E"))
+        assertNull(Phones.normalize("\uFF11\uFF12\uFF13\uFF14\uFF15\uFF16\uFF17\uFF18"))
+    }
+
+    @Test
     fun `passwords round trip through hash and verify`() {
         val password = "correct horse battery staple".toCharArray()
         val encoded = Passwords.hash(password)
