@@ -153,3 +153,11 @@ python tools/scripts/plan-status.py --plan docs/project/plan/backend
   test class is named but the box stays unticked until the run is recorded.
 - This file is indexed from [`docs/README.md`](../../README.md); the week-2 plan
   checklist entry is [`../plan/backend/week2.md`](../plan/backend/week2.md) W2.8.
+
+## Pre-demo
+
+- [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
+      before the demo (the unauthenticated per-IP rate limits key on the first
+      XFF hop), or record the trusted proxy hop and change the limiter key in
+      `remoteAddress` to match.
+

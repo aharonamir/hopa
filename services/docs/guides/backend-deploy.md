@@ -45,6 +45,14 @@ It must return `false`. If it returns `true`, the Render user owns the cluster a
 the tenant policies are not protecting anything; create a non-superuser role
 before the beta.
 
+## Rate limits and the edge
+
+The per-IP rate limits on unauthenticated routes key on the **first
+`X-Forwarded-For` hop** (`remoteAddress` in the gateway). That is only
+meaningful if the edge overwrites a client-supplied `X-Forwarded-For`; confirm
+this at the Render edge before the demo, or record the trusted proxy hop and
+change the limiter key to match.
+
 ## Provision `hopa_admin` (required before the first V2 migration)
 
 Admin lookups read tenant rows through four `SECURITY DEFINER` functions owned by
@@ -90,6 +98,23 @@ revoke admin option for hopa_admin from <deploy_role>;
 The runtime login (`hopa_app` in `render.yaml`) must not be a superuser and must
 not hold `hopa_admin` membership: a SQL injection that can `SET ROLE` into the
 BYPASSRLS owner defeats RLS.
+
+## Upgrading to V5 (existing database)
+
+`V5__admin_account_id.sql` drops and recreates the two `hopa_admin`-owned
+resolvers `admin_resolve_member` and `admin_resolve_household` (adding
+`account_id`), so it needs the **same temporary provisioning as V2**. This is
+required on **every existing database** that reaches V5, not only the first V2
+run: on a V2-V4 database with a non-superuser deploy role, V5 fails until the
+provisioning is re-applied.
+
+Re-run one of the two paths above:
+
+- run the migration as a database **superuser**; or
+- grant the migration role `hopa_admin` **with admin option** for the duration
+  of the migration, then revoke it and re-check the two residual queries in
+  the previous section (`rolsuper`/`rolbypassrls` and the `pg_auth_members`
+  admin-option scan).
 
 ## Free tier
 
