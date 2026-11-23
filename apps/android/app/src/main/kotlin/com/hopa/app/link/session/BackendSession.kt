@@ -66,6 +66,10 @@ class BackendSession(
     @Volatile
     var onApproval: (suspend (BackendEnvelope) -> Unit)? = null
 
+    /** Plaintext `diag.*` deliveries; acked on the link, never goal-bearing. */
+    @Volatile
+    var onDiagnostic: (suspend (BackendEnvelope) -> Unit)? = null
+
     /** The live socket, for the runner that answers a delivery on it. */
     fun currentLink(): BackendLink? = link
 
@@ -248,6 +252,22 @@ class BackendSession(
             onTask?.invoke(envelope)
         }
         created.onApproval = { envelope -> onApproval?.invoke(envelope) }
+        created.onDiagnostic = { envelope ->
+            // A diagnostic is plaintext and never goal-bearing; always ack it on
+            // the link it arrived on, even when the handler throws, and never let
+            // a failed ack tear the link down. Nothing here logs the body.
+            try {
+                onDiagnostic?.invoke(envelope)
+            } finally {
+                try {
+                    created.ack(envelope)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // A closed socket must not kill the link; the ack is best-effort.
+                }
+            }
+        }
         link = created
         refresh.onConnected()
         stateJob = scope.launch { created.state.collect { publish(it) } }

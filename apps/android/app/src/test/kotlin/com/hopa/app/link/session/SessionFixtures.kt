@@ -7,6 +7,7 @@ import com.hopa.backend.pairing.BackendPairing
 import com.hopa.backend.link.BackendState
 import com.hopa.stores.AppSettings
 import com.hopa.stores.SettingsRepository
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,12 +63,17 @@ internal object SessionFixtures {
         override val state = MutableStateFlow<BackendState>(BackendState.Disconnected)
         override var onTask: (suspend (BackendEnvelope) -> Unit)? = null
         override var onApproval: (suspend (BackendEnvelope) -> Unit)? = null
+        override var onDiagnostic: (suspend (BackendEnvelope) -> Unit)? = null
 
         @Volatile
         var started = false
 
         @Volatile
         var stopped = false
+
+        /** The `task.ack` frames this link sent, in order, for delivery tests. */
+        private val ackCalls = CopyOnWriteArrayList<BackendEnvelope>()
+        val acks: List<BackendEnvelope> get() = ackCalls
 
         override fun start(scope: CoroutineScope) {
             started = true
@@ -80,7 +86,9 @@ internal object SessionFixtures {
         }
 
         override suspend fun send(frame: BackendEnvelope) = Unit
-        override suspend fun ack(task: BackendEnvelope) = Unit
+        override suspend fun ack(task: BackendEnvelope) {
+            ackCalls += task
+        }
         override suspend fun ping() = Unit
     }
 

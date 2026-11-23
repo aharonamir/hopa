@@ -373,6 +373,9 @@ class AppContainer @Inject constructor(@ApplicationContext context: Context) : C
         // the answer back, so it must not claim the screen or run a turn.
         backend.onTask = { task -> remoteRunner.handle(task) }
         backend.onApproval = { task -> remoteApproval.handle(task) }
+        // A diagnostic is plaintext and not goal-bearing; the session acks it
+        // regardless. Nothing here reads or logs the body (trace/id only).
+        backend.onDiagnostic = { }
     }
 
     private fun startRunServiceInternal() {

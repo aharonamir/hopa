@@ -113,6 +113,7 @@ private fun runProtocol(options: CliOptions) {
     val backendScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val sessionPath = dataDir.resolve("backend-session.json")
     val sessionStore = BackendSessionStore(sessionPath)
+    val pairingGate = PairingGate()
     val runner = EngineTaskRunner(
         startTurn = { id, goal -> engine.startTurn(id, goal, conversationId = null) },
         cancelTurn = engine::cancel,
@@ -372,14 +373,19 @@ private fun runProtocol(options: CliOptions) {
             }
 
             // Pairing polls and prints the QR on stderr, so it must not block
-            // the stdin loop. The reply carries identifiers only.
+            // the stdin loop. The reply carries identifiers only. Only one
+            // admission runs at a time: a second command while the first is
+            // unresolved is refused immediately, so two sessions are never
+            // minted and the store is never written twice.
             "backend.pair" -> {
                 val url = message.text("url").trim()
                 val name = message.text("name").trim().ifBlank { "Windows PC" }
-                backendScope.launch {
-                    val reply = if (url.isBlank()) {
-                        Protocol.backendPair(ok = false, error = "IllegalArgumentException")
-                    } else {
+                if (url.isBlank()) {
+                    io.send(Protocol.backendPair(ok = false, error = "IllegalArgumentException"))
+                } else if (!pairingGate.tryStart()) {
+                    io.send(Protocol.backendPair(ok = false, error = "already pairing"))
+                } else {
+                    backendScope.launch {
                         try {
                             BackendPairing(dataDir).admit(url, name)
                             val saved = sessionStore.load()
@@ -387,15 +393,16 @@ private fun runProtocol(options: CliOptions) {
                             val key = backendContentKey(saved)
                                 ?: throw IllegalStateException("admission stored an invalid content key")
                             gateways.start(saved, key)
-                            Protocol.backendPair(ok = true)
+                            io.send(Protocol.backendPair(ok = true))
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failed: Exception) {
                             io.log("backend pairing failed (${failed.javaClass.simpleName})")
-                            Protocol.backendPair(ok = false, error = failed.javaClass.simpleName)
+                            io.send(Protocol.backendPair(ok = false, error = failed.javaClass.simpleName))
+                        } finally {
+                            pairingGate.finish()
                         }
                     }
-                    io.send(reply)
                 }
             }
 

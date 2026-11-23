@@ -111,6 +111,13 @@ The gateway flow is in `GatewayClient.cs`; the phone side is
 `RemoteApprovalRunner.kt`. The implementation record is
 [`docs/project/evidence/P4-phonelink.md`](../../docs/project/evidence/P4-phonelink.md).
 
+## Logging
+
+Turn logs are deliberately redacted. The sidecar logs `turn <id> in
+<conversation>` without the goal text, because a goal may be private; it is
+persisted in the conversation store only, never written to the log. A turn log
+line that carries no goal is not lost output — it is an intentional redaction.
+
 ## Rules
 
 1. The loop, the gate and the records live in `packages/`, inside the sidecar.

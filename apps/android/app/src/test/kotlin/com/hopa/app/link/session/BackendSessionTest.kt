@@ -7,6 +7,7 @@ import com.hopa.app.link.session.SessionFixtures.gateway
 import com.hopa.app.link.session.SessionFixtures.pairingServer
 import com.hopa.app.link.session.SessionFixtures.session
 import com.hopa.backend.pairing.PairingLink
+import com.hopa.backend.wire.BackendEnvelope
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -210,4 +211,80 @@ class BackendSessionTest {
         }
     }
 
+    @Test
+    fun `a delivered diagnostic reaches the app handler and is acked once`() = runBlocking {
+        val settings = FakeSettings().paired("wss://x/v1/gateway")
+        val created = CompletableDeferred<FakeLink>()
+        val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
+            FakeLink(credentials, pushToken, refresh).also { created.complete(it) }
+        })
+        val handled = CompletableDeferred<BackendEnvelope>()
+        session.onDiagnostic = { frame -> handled.complete(frame) }
+        try {
+            session.onForeground()
+            val link = withTimeout(2_000) { created.await() }
+            withTimeout(2_000) { while (link.onDiagnostic == null) delay(10) }
+
+            val frame = BackendEnvelope(
+                id = "d1",
+                type = "diag.ping",
+                ts = 2,
+                trace = TRACE,
+                from = "server",
+                to = "dev-1",
+                task = "task-1",
+            )
+            requireNotNull(link.onDiagnostic).invoke(frame)
+
+            assertEquals(frame, withTimeout(2_000) { handled.await() })
+            assertEquals(1, link.acks.size)
+            assertEquals("task-1", link.acks.single().task)
+            assertEquals(TRACE, link.acks.single().trace)
+        } finally {
+            session.disconnect()
+        }
+    }
+
+    @Test
+    fun `a diagnostic is still acked when the app handler throws`() = runBlocking {
+        val settings = FakeSettings().paired("wss://x/v1/gateway")
+        val created = CompletableDeferred<FakeLink>()
+        val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
+            FakeLink(credentials, pushToken, refresh).also { created.complete(it) }
+        })
+        session.onDiagnostic = { throw IllegalStateException("boom") }
+        try {
+            session.onForeground()
+            val link = withTimeout(2_000) { created.await() }
+            withTimeout(2_000) { while (link.onDiagnostic == null) delay(10) }
+
+            val frame = BackendEnvelope(
+                id = "d1",
+                type = "diag.ping",
+                ts = 2,
+                trace = TRACE,
+                from = "server",
+                to = "dev-1",
+                task = "task-1",
+            )
+            // The app handler's failure propagates (BackendClient.dispatch swallows
+            // it in production), but the ack still goes out on the way.
+            val thrown = try {
+                requireNotNull(link.onDiagnostic).invoke(frame)
+                null
+            } catch (error: Exception) {
+                error
+            }
+            assertEquals("boom", thrown?.message)
+            assertEquals(1, link.acks.size)
+            assertEquals("task-1", link.acks.single().task)
+            assertEquals(TRACE, link.acks.single().trace)
+        } finally {
+            session.disconnect()
+        }
+    }
+
+    private companion object {
+        const val TRACE = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    }
 }
