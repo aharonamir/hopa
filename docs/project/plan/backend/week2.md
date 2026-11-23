@@ -373,6 +373,7 @@ was verified rather than re-run. Sync v0 stays outside this slice per the
 | 8. Android scan and vouch | `2695a52d`, `7db884c5`, `7b3b5642` | fix round 1 (non-pending states, ktlint) |
 | 9. README and evidence skeleton | `8c4eec3b` | approved, no fix |
 | 10. Review follow-ups | `99f7e39f` | approved, no fix |
+| Final whole-branch fix wave | `2294a55c`, `975328b0`, `8979cb07`, `332f2ccc`, `e32aa6d7` | one scoped re-review, all findings addressed |
 
 ### 11.2 Decisions taken during execution
 
@@ -405,6 +406,19 @@ was verified rather than re-run. Sync v0 stays outside this slice per the
   wired; 429 now has its own message and the card is threaded from the launch decision.
 - Task 8: expired/claimed sessions still reached the confirm screen; the state is now
   checked first and the test uses the server's real 200-with-state response.
+- Final review: concurrent duplicate sign-up could surface a 500; both sign-up and
+  OTP-create now map SQLState 23505 to the uniform `E_AUTH` (trigger-pinned test).
+  V5 had no existing-database test and the deploy guide only covered "before V2";
+  `V5UpgradeTest` now applies V5 to a V1–V4 database and pins the unprovisioned
+  refusal, and the guide states the superuser requirement.
+- Final review: the guide's non-superuser "temporary ADMIN OPTION" path was proven
+  impossible (the pre-existing grant survives the migration's self-revoke and trips
+  the residual guard), so the guide now says V2 and V5 need a superuser run. V2's
+  header comment is left untouched because editing a live migration changes its
+  Flyway checksum; V5's comment is corrected because V5 is new on this branch.
+- Final review: `X-Forwarded-For` is now load-bearing for four unauthenticated rate
+  limits; the evidence file carries an unticked pre-demo check that the edge
+  overwrites it. `Phones` now accepts ASCII digits only.
 
 ### 11.4 Deferred and parked
 
@@ -415,12 +429,16 @@ was verified rather than re-run. Sync v0 stays outside this slice per the
   case-sensitive; sign-in spans three transactions; `ScanScreen`/`AccountViewModel`
   use `remember`; the unreachable banner can overlap the top bar.
 - Sync v0 is not in this slice (its mini-design and implementation remain week 3 work).
+- From the final fix wave: the 23505 catch is blanket (any future unique violation in
+  that transaction would read as `E_AUTH`); the `PostgresHarness` comment still
+  repeats the disproven ADMIN OPTION path; the earlier per-task minors remain as
+  listed above.
 
-### 11.5 Verification at `99f7e39f`
+### 11.5 Verification at `e32aa6d7` (after the final fix wave)
 
 | Command | Result |
 |---|---|
-| `apps\android\gradlew.bat -p services/backend :test --rerun-tasks` | 219 tests, 0 failures |
+| `apps\android\gradlew.bat -p services/backend :test --rerun-tasks` | 223 tests, 0 failures |
 | `apps\android\gradlew.bat -p apps/android :backend:test --rerun-tasks` | 97 tests, 0 failures |
 | `apps\android\gradlew.bat -p apps/android :app:testDebugUnitTest --rerun-tasks` | 89 tests, 0 failures |
 | `apps\android\gradlew.bat -p apps/windows/sidecar test --rerun-tasks` | 44 tests, 0 failures |
