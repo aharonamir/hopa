@@ -6,6 +6,7 @@ import com.hopa.backend.pairing.TokenIssuer
 import com.hopa.backend.store.Database
 import java.security.SecureRandom
 import java.sql.Connection
+import java.sql.SQLException
 import java.util.Base64
 import java.util.UUID
 
@@ -90,37 +91,47 @@ class AccountService(
         val passwordHash = Passwords.hash(request.password.toCharArray())
 
         // Account, household, owner member, device, wrap and tokens commit in one
-        // tenant transaction. A failure anywhere rolls the whole thing back.
-        val signedIn = db.tenant(householdId) { connection ->
-            createAccountHouseholdAndMember(
-                connection,
-                accountId,
-                householdId,
-                memberId,
-                phone,
-                passwordHash,
-                request.name,
-            )
-            val device = issueSignedInDevice(
-                connection,
-                accountId,
-                householdId,
-                memberId,
-                request.platform,
-                request.name,
-                publicKey,
-                request.pushToken,
-            )
-            connection.prepareStatement(
-                "insert into household_key_wraps(household_id, device_id, wrapped_key) " +
-                    "values (?::uuid, ?::uuid, ?)",
-            ).use {
-                it.setString(1, householdId)
-                it.setString(2, device.deviceId)
-                it.setBytes(3, wrapped)
-                it.executeUpdate()
+        // tenant transaction. A failure anywhere rolls the whole thing back. A
+        // concurrent duplicate phone slips past the pre-check above and hits the
+        // partial unique index (SQLState 23505) here; that is refused with the
+        // same uniform E_AUTH rather than surfacing as a 500.
+        val signedIn = try {
+            db.tenant(householdId) { connection ->
+                createAccountHouseholdAndMember(
+                    connection,
+                    accountId,
+                    householdId,
+                    memberId,
+                    phone,
+                    passwordHash,
+                    request.name,
+                )
+                val device = issueSignedInDevice(
+                    connection,
+                    accountId,
+                    householdId,
+                    memberId,
+                    request.platform,
+                    request.name,
+                    publicKey,
+                    request.pushToken,
+                )
+                connection.prepareStatement(
+                    "insert into household_key_wraps(household_id, device_id, wrapped_key) " +
+                        "values (?::uuid, ?::uuid, ?)",
+                ).use {
+                    it.setString(1, householdId)
+                    it.setString(2, device.deviceId)
+                    it.setBytes(3, wrapped)
+                    it.executeUpdate()
+                }
+                device
             }
-            device
+        } catch (problem: SQLException) {
+            if (problem.sqlState == "23505") {
+                return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
+            }
+            throw problem
         }
 
         return AccountOutcome.Ok(signedIn.toCreated(accountId, householdId))
@@ -265,27 +276,34 @@ class AccountService(
         // account therefore always fails.
         val passwordHash = throwawayPasswordHash()
 
-        val signedIn = db.tenant(householdId) { connection ->
-            createAccountHouseholdAndMember(
-                connection,
-                accountId,
-                householdId,
-                memberId,
-                phone,
-                passwordHash,
-                name,
-                verified = true,
-            )
-            issueSignedInDevice(
-                connection,
-                accountId,
-                householdId,
-                memberId,
-                platform,
-                name,
-                publicKey,
-                pushToken,
-            )
+        val signedIn = try {
+            db.tenant(householdId) { connection ->
+                createAccountHouseholdAndMember(
+                    connection,
+                    accountId,
+                    householdId,
+                    memberId,
+                    phone,
+                    passwordHash,
+                    name,
+                    verified = true,
+                )
+                issueSignedInDevice(
+                    connection,
+                    accountId,
+                    householdId,
+                    memberId,
+                    platform,
+                    name,
+                    publicKey,
+                    pushToken,
+                )
+            }
+        } catch (problem: SQLException) {
+            if (problem.sqlState == "23505") {
+                return AccountOutcome.Refused("E_AUTH", AUTH_FAILED)
+            }
+            throw problem
         }
 
         return AccountOutcome.Ok(signedIn.toCreated(accountId, householdId))

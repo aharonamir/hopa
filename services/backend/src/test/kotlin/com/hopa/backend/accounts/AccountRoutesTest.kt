@@ -161,6 +161,39 @@ class AccountRoutesTest {
         }
     }
 
+    /**
+     * Simulates the race the partial unique index closes: a duplicate phone
+     * that slips past the read-then-insert pre-check and raises SQLState 23505
+     * on the accounts insert. The sign-up must refuse with the same uniform
+     * E_AUTH, never surface a 500.
+     */
+    private fun installAccountDuplicateTrigger() {
+        PostgresHarness.adminDatabase().dataSource.connection.use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute(
+                    """
+                    create function public.fail_account_insert() returns trigger as
+                    'begin raise exception ''duplicate phone'' using errcode = ''23505''; end;'
+                    language plpgsql
+                    """.trimIndent(),
+                )
+                statement.execute(
+                    "create trigger fail_account_insert_trigger before insert on accounts " +
+                        "for each row execute function public.fail_account_insert()",
+                )
+            }
+        }
+    }
+
+    private fun dropAccountDuplicateTrigger() {
+        PostgresHarness.adminDatabase().dataSource.connection.use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("drop trigger if exists fail_account_insert_trigger on accounts")
+                statement.execute("drop function if exists public.fail_account_insert()")
+            }
+        }
+    }
+
     @Test
     fun `a sign-up creates the account household owner device and wrap in one transaction`() =
         testApplication {
@@ -227,6 +260,24 @@ class AccountRoutesTest {
             }
         } finally {
             dropDeviceFailureTrigger()
+        }
+    }
+
+    @Test
+    fun `a concurrent duplicate phone is the same E_AUTH and leaves no rows`() = testApplication {
+        application { module(config()) }
+        installAccountDuplicateTrigger()
+        try {
+            val before = globalCounts()
+
+            val response = client.signUp(uniquePhone(), address = "198.51.100.47")
+
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
+            assertEquals("E_AUTH", errorCode(response))
+            assertEquals("invalid phone or password", errorMessage(response))
+            assertEquals(before, globalCounts(), "a duplicate-phone refusal must leave every table unchanged")
+        } finally {
+            dropAccountDuplicateTrigger()
         }
     }
 
