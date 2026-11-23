@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Week 2 lane B verification guide for HOPA: accounts, OTP, the admin console, and the Android sign-in and scan flow - what shipped, how to prove it, and what still needs a phone and a deploy.">
+<title>HOPA backend - Week 2 lane B verification</title>
+<style>
+  :root {
+    --bg: #f6f6f3;
+    --surface: #ffffff;
+    --surface-2: #eef0ea;
+    --text: #1b1e1a;
+    --muted: #4f574d;
+    --border: #d8dcd2;
+    --accent: #1f6b4a;
+    --on-accent: #ffffff;
+    --accent-weak: #e7f2ec;
+    --warn: #7a5300;
+    --warn-weak: #fff3d6;
+    --danger: #9d2f2f;
+    --danger-weak: #fdecec;
+    --code-bg: #151a16;
+    --code-text: #e9eee9;
+    --code-border: #2c3530;
+    --shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 10px 30px rgb(0 0 0 / 4%);
+    --radius: 14px;
+    color-scheme: light dark;
+    accent-color: var(--accent);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1211;
+      --surface: #171b18;
+      --surface-2: #1e2420;
+      --text: #e9ede8;
+      --muted: #b8c0b6;
+      --border: #2b332e;
+      --accent: #74d6a7;
+      --on-accent: #082015;
+      --accent-weak: #163025;
+      --warn: #f0c46d;
+      --warn-weak: #332a14;
+      --danger: #ffa1a1;
+      --danger-weak: #3b1e1e;
+      --code-bg: #0a0d0b;
+      --code-text: #e9eee9;
+      --code-border: #2c3530;
+      --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 10px 30px rgb(0 0 0 / 25%);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: 0.16em;
+  }
+
+  a:hover { text-decoration-thickness: 2px; }
+
+  :focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .skip-link {
+    position: absolute;
+    inset-block-start: -100px;
+    inset-inline-start: 1rem;
+    z-index: 10;
+    padding: 0.6rem 0.9rem;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+  }
+
+  .skip-link:focus { inset-block-start: 1rem; }
+
+  .visually-hidden {
+    position: absolute !important;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .shell {
+    display: grid;
+    gap: 2rem;
+    max-inline-size: 1280px;
+    margin-inline: auto;
+    padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 5rem;
+  }
+
+  @media (min-width: 900px) {
+    .shell {
+      grid-template-columns: 232px minmax(0, 1fr);
+      gap: 2.5rem;
+      align-items: start;
+    }
+
+    .sidebar { position: sticky; inset-block-start: 1.25rem; }
+  }
+
+  @media (min-width: 1180px) {
+    .shell { gap: 3.5rem; }
+  }
+
+  .sidebar { font-size: 0.88rem; }
+
+  .toc {
+    scroll-target-group: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 1rem 1rem 0.85rem;
+    box-shadow: var(--shadow);
+  }
+
+  .toc-title {
+    margin: 0 0 0.6rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .toc a {
+    display: block;
+    padding: 0.28rem 0.5rem;
+    border-radius: 7px;
+    color: var(--muted);
+    text-decoration: none;
+    line-height: 1.35;
+  }
+
+  .toc a:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .toc a:is(:target-current, .target-current) {
+    background: var(--accent-weak);
+    color: var(--accent);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .sidebar-note {
+    margin-block-start: 0.85rem;
+    padding-inline: 0.5rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 899px) {
+    .toc { padding: 0.7rem 0.75rem 0.75rem; }
+    .toc-title { margin-block-end: 0.4rem; }
+    .toc ol {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+    .toc a {
+      padding: 0.16rem 0.55rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+    .toc a:is(:target-current, .target-current) {
+      background: var(--accent);
+      color: var(--on-accent);
+      box-shadow: none;
+    }
+    .sidebar-note { display: none; }
+  }
+
+  main { min-inline-size: 0; }
+
+  .hero {
+    background:
+      radial-gradient(circle at 12% 0%, var(--accent-weak), transparent 52%),
+      linear-gradient(135deg, var(--surface), var(--surface-2));
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: clamp(1.4rem, 4vw, 2.9rem);
+    box-shadow: var(--shadow);
+  }
+
+  h1 {
+    margin: 0 0 0.8rem;
+    font-size: clamp(2.1rem, 5.4vw, 3.7rem);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+  }
+
+  .lede {
+    max-inline-size: 66ch;
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(1rem, 1.6vw, 1.14rem);
+  }
+
+  .status-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-block-start: 1.25rem;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .status .dot {
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    border-radius: 999px;
+    background: var(--accent);
+    flex: none;
+  }
+
+  .status[data-state="later"] .dot { background: var(--warn); }
+  .status[data-state="open"] .dot { background: var(--danger); }
+
+  .hero-meta {
+    margin-block-start: 1.2rem;
+    padding-block-start: 0.9rem;
+    border-block-start: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  section {
+    scroll-margin-block-start: 1.5rem;
+    margin-block-start: 3.4rem;
+  }
+
+  h2 {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.45rem, 2.6vw, 2rem);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+
+  h3 {
+    margin: 0 0 0.3rem;
+    font-size: 1.02rem;
+    line-height: 1.35;
+  }
+
+  .section-intro {
+    max-inline-size: 74ch;
+    margin: 0 0 1.2rem;
+    color: var(--muted);
+  }
+
+  /* Two verification clocks: a board, not a row of metric cards. */
+  .clocks {
+    display: grid;
+    gap: 1px;
+    margin: 1.4rem 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  @media (min-width: 760px) {
+    .clocks { grid-template-columns: 1fr 1fr; }
+  }
+
+  .clock {
+    display: grid;
+    align-content: start;
+    gap: 0.35rem;
+    padding: 1.25rem 1.3rem;
+    background: var(--surface);
+  }
+
+  .clock.later { background: var(--surface-2); }
+
+  .clock-label {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .clock strong {
+    display: block;
+    font-size: clamp(1.7rem, 3.2vw, 2.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+
+  .clock > p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.86rem;
+  }
+
+  .clock ul {
+    list-style: none;
+    margin: 0.55rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.88rem;
+  }
+
+  .clock li {
+    position: relative;
+    padding-inline-start: 1.1rem;
+  }
+
+  .clock li::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 0.62em;
+    inline-size: 0.42rem;
+    block-size: 0.42rem;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .clock.later li::before { background: var(--warn); }
+
+  .clock-foot {
+    margin-block-start: 0.7rem;
+    padding-block-start: 0.7rem;
+    border-block-start: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .callout {
+    margin: 1.2rem 0;
+    padding: 1rem 1.2rem;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    background: var(--accent-weak);
+  }
+
+  .callout.warn {
+    border-color: var(--warn);
+    background: var(--warn-weak);
+  }
+
+  .callout.danger {
+    border-color: var(--danger);
+    background: var(--danger-weak);
+  }
+
+  .callout p { margin: 0; }
+  .callout p + p { margin-block-start: 0.55rem; }
+
+  .callout-label {
+    margin: 0 0 0.35rem;
+    font-weight: 800;
+    font-size: 0.95rem;
+  }
+
+  /* Feature ledger: one scannable row per contract, not a card grid. */
+  .ledger {
+    list-style: none;
+    margin: 1.2rem 0;
+    padding: 0;
+    border-block-start: 1px solid var(--border);
+  }
+
+  .ledger > li {
+    display: grid;
+    grid-template-columns: 2.3rem minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 1.05rem 0;
+    border-block-end: 1px solid var(--border);
+  }
+
+  .ledger .num {
+    display: grid;
+    place-items: center;
+    inline-size: 2.1rem;
+    block-size: 2.1rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .ledger h3 { margin-block-start: 0.1rem; }
+
+  .ledger p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.55rem;
+    margin-block-start: 0.5rem !important;
+    font-size: 0.78rem !important;
+    line-height: 1.5;
+  }
+
+  .meta-label {
+    color: var(--muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* One admission, five moves. */
+  .flow {
+    list-style: none;
+    margin: 1.2rem 0;
+    padding: 0;
+    display: grid;
+    gap: 0.7rem;
+    counter-reset: move;
+  }
+
+  .flow li {
+    counter-increment: move;
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .flow li::before {
+    content: counter(move);
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .flow strong { display: block; }
+  .flow p { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.88rem; }
+
+  .flow code { white-space: nowrap; }
+
+  /* Per-feature proof disclosures. */
+  .proof {
+    margin: 0.7rem 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .proof summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.4rem 1rem;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  /* A drawn disclosure cue: flex removes the native summary marker. */
+  .proof summary::before {
+    content: "";
+    inline-size: 0.46rem;
+    block-size: 0.46rem;
+    border-inline-end: 2px solid var(--muted);
+    border-block-end: 2px solid var(--muted);
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+    flex: none;
+  }
+
+  .proof[open] summary::before { transform: rotate(45deg); }
+  .proof summary::marker { color: var(--accent); }
+  .proof[open] summary { border-block-end: 1px solid var(--border); }
+
+  .proof-title { font-size: 0.98rem; }
+
+  .proof-count {
+    margin-inline-start: auto;
+    padding: 0.12rem 0.48rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .proof-body { padding: 0.9rem 1rem 1rem; }
+  .proof-body p { margin: 0.35rem 0 0; color: var(--muted); }
+  .proof-body p strong { color: var(--text); }
+  .proof-body .code-block { margin-block: 0.55rem 0.8rem; }
+
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    margin: 1.1rem 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    min-inline-size: 0;
+    padding-inline-start: 2.85rem;
+  }
+
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 0.05rem;
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 800;
+    font-size: 0.9rem;
+  }
+
+  .steps h3 { margin-block-start: 0.15rem; }
+  .steps p { margin: 0.2rem 0 0.55rem; color: var(--muted); }
+  .steps p strong { color: var(--text); }
+
+  .code-block {
+    position: relative;
+    min-inline-size: 0;
+    margin: 0.85rem 0 1.1rem;
+  }
+
+  .code-block::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 1px;
+    inset-inline-end: 1px;
+    inline-size: 6.6rem;
+    block-size: 2.6rem;
+    border-start-end-radius: 12px;
+    background: linear-gradient(to right, transparent, var(--code-bg) 34%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .code-block pre {
+    margin: 0;
+    max-inline-size: 100%;
+    padding: 1rem 1.1rem;
+    padding-inline-end: 5.4rem;
+    overflow: auto;
+    border: 1px solid var(--code-border);
+    border-radius: 12px;
+    background: var(--code-bg);
+    color: var(--code-text);
+    font-size: 0.84rem;
+    line-height: 1.6;
+    tab-size: 2;
+  }
+
+  .code-block code {
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    white-space: pre;
+  }
+
+  .code-block > .copy-button {
+    position: absolute;
+    inset-block-start: 0.55rem;
+    inset-inline-end: 0.55rem;
+    z-index: 1;
+  }
+
+  .copy-button {
+    min-inline-size: 2.6rem;
+    min-block-size: 2rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--code-border);
+    border-radius: 8px;
+    background: #232b26;
+    color: #e9eee9;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .copy-button:hover { background: #303b34; }
+  .copy-button:active { transform: translateY(1px); }
+  .copy-button[data-copied] { background: var(--accent); color: var(--on-accent); }
+  .copy-button[data-failed] { background: var(--danger); color: #fff; }
+
+  .tip {
+    position: absolute;
+    inset-block-start: 0.55rem;
+    inset-inline-end: 4.4rem;
+    z-index: 1;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    background: #232b26;
+    color: #e9eee9;
+    font-size: 0.74rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .copy-button[data-copied] + .tip,
+  .copy-button[data-failed] + .tip { opacity: 1; }
+
+  .table-wrap {
+    container-type: inline-size;
+    overflow: auto;
+    max-inline-size: 100%;
+    margin: 1rem 0;
+    padding: 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  table {
+    inline-size: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9rem;
+  }
+
+  caption {
+    padding: 0.8rem 1rem 0.2rem;
+    text-align: start;
+    font-weight: 700;
+    font-size: 0.88rem;
+  }
+
+  th, td {
+    padding: 0.65rem 0.9rem;
+    text-align: start;
+    vertical-align: top;
+    border-block-start: 1px solid var(--border);
+  }
+
+  thead th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 1;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  tbody th { font-weight: 700; }
+  tbody tr:first-child th,
+  tbody tr:first-child td { border-block-start: 0; }
+
+  .fit-headers tbody th { white-space: nowrap; }
+  .fit-headers tbody th code { white-space: nowrap; }
+
+  @container (width < 620px) {
+    table, tbody, tr, th, td { display: block; }
+    thead { display: none; }
+    caption { padding-block-end: 0.45rem; }
+    tr {
+      padding-block: 0.45rem;
+      border-block-start: 1px solid var(--border);
+    }
+    tbody tr:first-child { border-block-start: 0; }
+    th, td { border: 0; padding: 0.3rem 1rem; }
+    tbody th {
+      background: var(--surface-2);
+      padding-block: 0.5rem;
+    }
+    td[data-label]::before {
+      content: attr(data-label) ": ";
+      color: var(--muted);
+      font-weight: 700;
+    }
+  }
+
+  code:not(pre code) {
+    padding: 0.1em 0.35em;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-2);
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    font-size: 0.88em;
+    overflow-wrap: anywhere;
+  }
+
+  .plain-list {
+    margin: 0.8rem 0;
+    padding-inline-start: 1.15rem;
+    color: var(--muted);
+  }
+
+  .plain-list li { margin-block: 0.3rem; }
+  .plain-list strong { color: var(--text); }
+
+  details:not(.proof) {
+    margin: 1rem 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 0.85rem 1rem;
+  }
+
+  details:not(.proof) summary {
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  details:not(.proof) summary::marker { color: var(--accent); }
+  details:not(.proof)[open] summary { margin-block-end: 0.7rem; }
+
+  .footer {
+    margin-block-start: 3.5rem;
+    padding-block-start: 1.2rem;
+    border-block-start: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .footer p { margin: 0.35rem 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+
+  @media print {
+    :root { color-scheme: light; }
+    body { background: #fff; color: #000; }
+    .sidebar, .copy-button, .tip, .skip-link { display: none !important; }
+    .shell { display: block; max-inline-size: none; padding: 0; }
+    .hero, .clock, .proof, .flow li, table, details { box-shadow: none; break-inside: avoid; }
+    .code-block pre { white-space: pre-wrap; }
+    a { color: #000; text-decoration: underline; }
+    .code-block::after { display: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="shell">
+  <aside class="sidebar">
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-title">On this page</p>
+      <ol>
+        <li><a href="#clocks">Two clocks</a></li>
+        <li><a href="#shipped">What shipped</a></li>
+        <li><a href="#shape">How the account fits</a></li>
+        <li><a href="#now">Verify now</a></li>
+        <li><a href="#console">The console</a></li>
+        <li><a href="#android">Android: sign in and scan</a></li>
+        <li><a href="#later">After Lane B</a></li>
+        <li><a href="#trouble">Troubleshooting</a></li>
+        <li><a href="#evidence">Evidence</a></li>
+      </ol>
+    </nav>
+    <p class="sidebar-note">
+      Static page. Open it directly in a browser; it needs no server and no network.
+      The commands assume PowerShell at the repository root.
+    </p>
+  </aside>
+
+  <main id="main">
+    <header class="hero">
+      <h1>Lane B is ready.<br>The phone holds the key.</h1>
+      <p class="lede">
+        Week 2 lane B built the real user: a phone number and password on the phone,
+        an optional SMS code, an admin console that looks households up through the
+        <code>hopa_admin</code> definer functions, and the Android sign-in and camera
+        scan that admits a PC. This page separates what the branch proves today from
+        what still needs a phone, a camera and a deploy.
+      </p>
+      <div class="status-rail" aria-label="Branch and test status">
+        <span class="status" data-state="ok"><span class="dot" aria-hidden="true"></span>Rebased on <code>main</code> after lane A merged</span>
+        <span class="status"><span class="dot" aria-hidden="true"></span>508 local tests across four suites</span>
+        <span class="status" data-state="ok"><span class="dot" aria-hidden="true"></span>Accounts, OTP, console and Android green</span>
+        <span class="status" data-state="later"><span class="dot" aria-hidden="true"></span>Manual deployed E2E pending</span>
+        <span class="status" data-state="later"><span class="dot" aria-hidden="true"></span>Real camera scan pending</span>
+      </div>
+      <p class="hero-meta">
+        Branch <code>backend-week2-B</code> · code head <code>d2c8cba2</code>, rebased onto
+        <code>main</code> at <code>27737540</code> (lane A PR #140 merged) · stacked on lane A
+        · recorded 23 Nov 2026<br>
+        Synced with lane A's optional admin lookups: the resolvers live in
+        <code>db/admin/V5__admin_lookups.sql</code>, and the lookup route answers 503
+        <code>E_UNSUPPORTED</code> when <code>HOPA_ADMIN_LOOKUPS=false</code>.
+      </p>
+    </header>
+
+    <section id="clocks" tabindex="-1" aria-labelledby="clocks-title">
+      <h2 id="clocks-title">Two clocks, one branch</h2>
+      <p class="section-intro">
+        Lane B is the phone side of week 2: accounts, the console and the Android UI.
+        The contract tests run locally on this branch. The manual checks need a real
+        phone, a real camera and a deploy. A third clock is the lane A sync: the admin
+        lookups are optional and need a superuser database.
+      </p>
+
+      <div class="clocks">
+        <section class="clock now" aria-labelledby="clock-now-title">
+          <p class="clock-label" id="clock-now-title">Runnable today</p>
+          <strong>508 tests</strong>
+          <p>228 <code>services/backend</code> · 98 shared <code>core/backend</code> · 91 app · 91 sidecar</p>
+          <ul>
+            <li>E.164, Argon2id and the admin seed</li>
+            <li>Sign-up, sign-in and the optional SMS OTP</li>
+            <li>Admin session, household lookup and the PII log</li>
+            <li>Console pages, cookie auth and the CSRF guard</li>
+            <li>Android sign-in, launch modes, scan and vouch</li>
+          </ul>
+          <span class="clock-foot">
+            The backend suite needs Docker for Testcontainers; the shared client, app
+            and sidecar suites do not. None of them need Render, a phone or a camera.
+          </span>
+        </section>
+
+        <section class="clock later" aria-labelledby="clock-later-title">
+          <p class="clock-label" id="clock-later-title">Needs a phone and a deploy</p>
+          <strong>4 manual checks</strong>
+          <p>sign-up · camera scan · deployed round-trip · log grep</p>
+          <ul>
+            <li>Sign-up then sign-in on a real phone</li>
+            <li>A camera scan that admits a PC and unwraps the key</li>
+            <li>One encrypted task each way on the live core</li>
+            <li>A clean grep of the deployed week’s logs</li>
+          </ul>
+          <span class="clock-foot">
+            Exit checks 4, 5, 6 and 8 are proven by the branch; 1, 3, the manual part of
+            2, 7 and 9 need a manual run with trace ids in
+            <code>docs/project/evidence/B2-accounts.md</code>.
+          </span>
+        </section>
+      </div>
+
+      <div class="callout">
+        <p class="callout-label">The rule for this page</p>
+        <p>
+          “Proven” means a command you can run and a result you can read. The contract
+          tests are local by design and prove the branch, not the Render service. Nothing
+          on this page claims a manual phone or camera result today.
+        </p>
+      </div>
+    </section>
+
+    <section id="shipped" tabindex="-1" aria-labelledby="shipped-title">
+      <h2 id="shipped-title">What shipped</h2>
+      <p class="section-intro">
+        Eight contracts, each with a named test class and a file you can open. The
+        execution record in <a href="week2.md">the week-2 plan</a> (§11) carries the
+        full review history; this is the operator’s view.
+      </p>
+
+      <ol class="ledger">
+        <li>
+          <span class="num" aria-hidden="true">01</span>
+          <div>
+            <h3>E.164, Argon2id and the admin seed</h3>
+            <p>
+              One shared normalizer: a leading <code>+</code> or <code>00</code>, spaces and
+              dashes are accepted, the result is <code>+&lt;digits&gt;</code> for 8–15 ASCII
+              digits and <code>null</code> otherwise. Passwords hash with Argon2id over the
+              shared <code>core/backend</code> primitive. The bootstrap admin is upserted from
+              <code>HOPA_ADMIN_EMAIL</code>/<code>HOPA_ADMIN_PASSWORD</code> at boot, with a
+              lowercased email.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>core/backend/.../accounts/Phones.kt</code>, <code>accounts/Passwords.kt</code>,
+              <code>accounts/AdminSeed.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>AccountsUtilTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">02</span>
+          <div>
+            <h3>Sign-up and sign-in</h3>
+            <p>
+              <code>POST /v1/accounts</code> creates the account, a household-of-one, the
+              owner member, the first device, its self-wrap and the token pair in one
+              transaction. <code>POST /v1/session</code> signs in an existing account and
+              mints a signed-in device. An unknown phone and a wrong password answer the
+              same <code>E_AUTH</code>, rate limits are per IP and per phone, and a duplicate
+              sign-up race maps SQLState <code>23505</code> to the same <code>E_AUTH</code>.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>accounts/AccountService.kt</code>, <code>accounts/AccountRoutes.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>AccountRoutesTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">03</span>
+          <div>
+            <h3>Optional SMS OTP</h3>
+            <p>
+              <code>POST /v1/session/otp</code> and <code>/verify</code> sit behind
+              <code>HOPA_SMS_ENABLED</code> (default false), wired to a log-only
+              <code>SmsPort</code>. A verified login takes over an unverified account; an
+              unknown phone creates a verified household-of-one with a throwaway password
+              hash and no wrap. No vendor contract ships.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>accounts/OtpService.kt</code>, <code>accounts/OtpRoutes.kt</code>,
+              <code>accounts/SmsPort.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>OtpTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">04</span>
+          <div>
+            <h3>Admin session and household lookup</h3>
+            <p>
+              <code>POST /v1/admin/session</code> mints an 8-hour opaque admin token stored
+              only as SHA-256, rate limited per IP and per email.
+              <code>GET /v1/admin/households?query=</code> resolves a phone, member id or
+              household id through the <code>hopa_admin</code> definer functions and reads
+              the account fields, writing one <code>admin.pii.read</code> line (a hash, never
+              the raw phone or uuid) before any account read. The resolvers now return
+              <code>account_id</code>, folded into the optional <code>db/admin</code> migration
+              after the lane A sync.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>admin/AdminSessions.kt</code>, <code>admin/HouseholdLookup.kt</code>,
+              <code>admin/LookupRoutes.kt</code>, <code>db/admin/V5__admin_lookups.sql</code>
+              <span class="meta-label">Proof</span>
+              <code>LookupTest</code>, <code>V2SchemaTest</code>, <code>DiagSendTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">05</span>
+          <div>
+            <h3>The console</h3>
+            <p>
+              A server-rendered console (kotlinx.html) at <code>/console</code>: sign-in,
+              a health page, a household lookup page, a device page and a diag sender. It
+              is cookie-gated, rejects a cross-site <code>Origin</code> on sign-in (login
+              CSRF), caps form bodies at 64 KiB, and renders text nodes only. It never
+              renders a task payload, a conversation or an event.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>console/ConsoleRoutes.kt</code>, <code>console/ConsoleViews.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>ConsoleTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">06</span>
+          <div>
+            <h3>Android sign-in and the two modes</h3>
+            <p>
+              A phone-or-password sign-in screen and an <code>AccountViewModel</code>. With a
+              <code>backendUrl</code> configured the app runs against the gateway; with none it
+              stays local-only, and an unreachable gateway degrades to local-only with a
+              banner. The launch decision re-decides when the stored gateway or identity
+              changes.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>app/account/SignInScreen.kt</code>, <code>app/account/AccountViewModel.kt</code>,
+              <code>app/navigation/LaunchMode.kt</code>, <code>HopaNavHost.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>SignInViewModelTest</code>, <code>LaunchModeTest</code>,
+              <code>LaunchPairingTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">07</span>
+          <div>
+            <h3>Android camera scan and vouch</h3>
+            <p>
+              CameraX + ML Kit scan the PC’s <code>hopa://pair</code> QR; pasting the string
+              stays as fallback. The confirm screen shows the PC’s fingerprint, refuses a
+              non-<code>pending</code> session, wraps the household content key to the PC with
+              <code>KeyWrap.wrapForDevice</code> and posts the 60-byte blob.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>app/pair/ScanScreen.kt</code>, <code>app/pair/VouchViewModel.kt</code>
+              <span class="meta-label">Proof</span>
+              <code>VouchViewModelTest</code>
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">08</span>
+          <div>
+            <h3>Client follow-ups from the lane A review</h3>
+            <p>
+              The Android link always acks a delivered <code>diag.*</code> on the socket it
+              arrived on. The sidecar refuses a second concurrent <code>backend.pair</code>
+              with <code>ok=false, error="already pairing"</code>. The sidecar logs a turn
+              without the goal text — an intentional redaction, not lost output.
+            </p>
+            <p class="meta">
+              <span class="meta-label">Where</span>
+              <code>app/link/session/BackendSession.kt</code>,
+              <code>apps/windows/sidecar/.../PairingGate.kt</code>, <code>apps/windows/README.md</code>
+              <span class="meta-label">Proof</span>
+              <code>BackendSessionTest</code>, <code>PairingGateTest</code>
+            </p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="callout warn">
+        <p class="callout-label">The lane A sync, in one paragraph</p>
+        <p>
+          Lane A made the admin lookups optional after lane B branched
+          (<code>11d7cb36</code> moved the four definer functions into
+          <code>db/admin</code>, gated by <code>HOPA_ADMIN_LOOKUPS</code>). Lane B was
+          rebased onto the merged <code>main</code> and reconciled: the
+          <code>account_id</code> additions folded into the optional migration instead of a
+          colliding core <code>V5</code>; <code>GET /v1/admin/households</code> now gates on
+          the same <code>adminLookupsAvailable</code> helper as the device and diag routes,
+          so it answers 503 <code>E_UNSUPPORTED</code> on a database without the superuser
+          role. The full note is in <a href="week2.md">the plan</a> §11.7.
+        </p>
+      </div>
+    </section>
+
+    <section id="shape" tabindex="-1" aria-labelledby="shape-title">
+      <h2 id="shape-title">How the account fits</h2>
+      <p class="section-intro">
+        The phone is the first and the only required device: it signs up, owns the
+        household content key, and later vouches the PC that scans its QR. The backend
+        meets the two, and it never sees the plaintext key or needs the phone number
+        after login.
+      </p>
+
+      <ol class="flow">
+        <li>
+          <div>
+            <strong>The phone signs up.</strong>
+            <p>
+              <code>POST /v1/accounts</code> carries the E.164 phone, password, platform,
+              name and the device’s public key and self-wrap. One transaction writes the
+              account, the household-of-one, the owner member, the device, the wrap and the
+              tokens.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Signing in mints a device, not history.</strong>
+            <p>
+              <code>POST /v1/session</code> proves the password and returns a signed-in
+              device with tokens. It cannot read the household key — a new device gets that
+              only by a real wrap from a device that already holds it.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>OTP is an alternative credential.</strong>
+            <p>
+              With <code>HOPA_SMS_ENABLED=true</code> a code can verify a login. A verified
+              login binds and stamps <code>verified_at</code> on an unverified account, so a
+              squatter’s unverified row never blocks the real owner.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>The admin looks a household up.</strong>
+            <p>
+              <code>GET /v1/admin/households?query=</code> reaches tenant rows only through
+              the <code>hopa_admin</code> definer functions. Every read that resolves a phone
+              writes one <code>admin.pii.read</code> line carrying the admin id, the query
+              kind and a truncated hash — never the phone or a uuid.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>The PC joins by scanning.</strong>
+            <p>
+              The PC mints a pending session, the phone scans the QR and vouches the wrapped
+              key, and the PC claims it. That flow is lane A’s
+              <a href="week2-lane-a.html">verification guide</a>; lane B adds the phone that
+              drives it.
+            </p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="callout">
+        <p class="callout-label">What the admin can and cannot see</p>
+        <p>
+          The console can read a household’s device inventory and send a
+          <code>diag.ping</code>/<code>state</code>/<code>reset</code>. It cannot read a task
+          payload, a conversation or an event, and it never holds a household key. The phone
+          number is an account column behind the definer functions, not a key, and never
+          appears in the logs.
+        </p>
+      </div>
+    </section>
+
+    <section id="now" tabindex="-1" aria-labelledby="now-title">
+      <h2 id="now-title">Verify now</h2>
+      <p class="section-intro">
+        Open a contract, run its command, and compare the result with “green means”. Every
+        command is from the repository root on Windows PowerShell. Backend tests need Docker
+        because they start Postgres 16 with Testcontainers; the shared client, app and
+        sidecar suites do not.
+      </p>
+
+      <div class="callout">
+        <p class="callout-label">These are contract tests, not deployment tests</p>
+        <p>
+          The suites below run locally and prove the branch. They use Testcontainers,
+          MockWebServer and fake links, so they need no Render service and no phone. The
+          manual checks are in <a href="#later">After Lane B</a>.
+        </p>
+      </div>
+
+      <div class="callout">
+        <p class="callout-label">If you only run one pass</p>
+        <p>
+          Run <code>AccountRoutesTest</code> (sign-up, sign-in, the uniform refusals),
+          <code>LookupTest</code> (admin session, lookup and the PII log),
+          <code>ConsoleTest</code> (the pages and their guards) and the Android
+          <code>SignInViewModelTest</code> plus <code>VouchViewModelTest</code>. Those five
+          classes cover the failure that would end the demo.
+        </p>
+      </div>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">01 · E.164, Argon2id and the admin seed</span>
+          <span class="proof-count">AccountsUtilTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-util" aria-label="Copy the utility test command">Copy<span class="visually-hidden"> the utility test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-util-label" tabindex="0"><code id="now-util">apps\android\gradlew.bat -p services\backend :test `
+  --tests "*AccountsUtilTest*"</code></pre>
+            <span id="now-util-label" hidden>Utility test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> <code>+972 50-123-4567</code>, <code>972501234567</code>
+            and <code>00972501234567</code> all normalize to <code>+972501234567</code>; a
+            letter, a double plus, a short run or a null is refused; non-ASCII digits are
+            refused; passwords round-trip through hash and verify and a wrong password
+            fails; and the admin seed is a no-op on a blank value and stores the email
+            lowercased.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> feed the normalizer a letter or a one-digit run,
+            or reverse two bytes of an Argon2 encoded hash. Each must be refused, not guessed.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">02 · Sign-up and sign-in</span>
+          <span class="proof-count">AccountRoutesTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-accounts" aria-label="Copy the accounts test command">Copy<span class="visually-hidden"> the accounts test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-accounts-label" tabindex="0"><code id="now-accounts">apps\android\gradlew.bat -p services\backend :test `
+  --tests "*AccountRoutesTest*"</code></pre>
+            <span id="now-accounts-label" hidden>Accounts test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> sign-up writes exactly one account, household,
+            member, device, self-wrap and token pair; a failure rolls the whole transaction
+            back; sign-in gets a signed-in device; an unknown phone and a wrong password are
+            both <code>E_AUTH</code>; the rate limits per IP and per phone fire; and a
+            duplicate sign-up race is <code>E_AUTH</code>, not a 500.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> sign up twice with one phone, or force the unique
+            violation on the second insert. Both must answer <code>E_AUTH</code> and leave no
+            half-written household.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">03 · Optional SMS OTP</span>
+          <span class="proof-count">OtpTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-otp" aria-label="Copy the OTP test command">Copy<span class="visually-hidden"> the OTP test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-otp-label" tabindex="0"><code id="now-otp">apps\android\gradlew.bat -p services\backend :test `
+  --tests "*OtpTest*"</code></pre>
+            <span id="now-otp-label" hidden>OTP test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> the routes answer <code>E_UNSUPPORTED</code> with the
+            flag off; with the flag on, a code is single-use, 6 digits, 5 minutes, 3
+            attempts and 3 codes per phone per hour; a verified login binds and stamps an
+            unverified account; and an unknown phone creates a verified household-of-one
+            with no wrap.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> reuse a code, exhaust the attempt budget, or
+            verify with the flag off. All three must refuse without leaking whether the phone
+            exists.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">04 · Admin session and household lookup</span>
+          <span class="proof-count">LookupTest · V2SchemaTest · DiagSendTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-lookup" aria-label="Copy the lookup test command">Copy<span class="visually-hidden"> the lookup test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-lookup-label" tabindex="0"><code id="now-lookup">apps\android\gradlew.bat -p services\backend :test `
+  --tests "*LookupTest*" `
+  --tests "*V2SchemaTest*" `
+  --tests "*DiagSendTest*"</code></pre>
+            <span id="now-lookup-label" hidden>Lookup test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> a seeded admin signs in and a wrong password is a
+            uniform <code>E_AUTH</code> (the sixth attempt is <code>E_RATE</code>); the sign-in
+            is case-insensitive on the email; a lookup by phone, member id and household id
+            returns the same household; a tombstoned account is hidden; a device token is
+            <code>E_AUTH</code>; one <code>admin.pii.read</code> line is written per request
+            without the raw query; the three resolvers return four columns (including
+            <code>account_id</code>) owned by <code>hopa_admin</code>; and with
+            <code>HOPA_ADMIN_LOOKUPS=false</code> the lookup is 503 <code>E_UNSUPPORTED</code>.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> search by a household device token, look up a
+            tombstoned account, or run the lookup with the admin lookups off. Each must
+            refuse and write no account data.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">05 · The console</span>
+          <span class="proof-count">ConsoleTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-console" aria-label="Copy the console test command">Copy<span class="visually-hidden"> the console test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-console-label" tabindex="0"><code id="now-console">apps\android\gradlew.bat -p services\backend :test `
+  --tests "*ConsoleTest*"</code></pre>
+            <span id="now-console-label" hidden>Console test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> an unauthenticated page redirects to sign-in while
+            the form itself does not; sign-in sets a secure cookie and never echoes the
+            token; a lookup page shows the household id and the masked phone; a device page
+            for another household is 404; an HTML-injection display name is escaped; a
+            cross-site <code>Origin</code> is 403 with no cookie; an oversized form is 413;
+            and no page renders a task payload or an event.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> post the sign-in form with
+            <code>Origin: https://evil.example</code>, or put a script tag in a display name.
+            Both must be refused or escaped.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">06 · Android sign-in and the two modes</span>
+          <span class="proof-count">SignInViewModelTest · LaunchModeTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-signin" aria-label="Copy the Android sign-in test commands">Copy<span class="visually-hidden"> the Android sign-in test commands</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-signin-label" tabindex="0"><code id="now-signin">apps\android\gradlew.bat -p apps\android :app:testDebugUnitTest `
+  --tests "*SignInViewModelTest*" `
+  --tests "*LaunchModeTest*" `
+  --tests "*LaunchPairingTest*"</code></pre>
+            <span id="now-signin-label" hidden>Android sign-in test commands</span>
+          </div>
+          <p>
+            <strong>Green means</strong> sign-in validates the phone and password, surfaces a
+            429 with its own message (not “gateway unreachable”), and stores the returned
+            device; the launch decision chooses backend when a URL is configured and
+            local-only when it is not, and re-decides when the stored gateway or identity
+            changes.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> launch with no backend URL (local-only), then
+            with an unreachable one (a banner, still usable), then sign in against a gateway
+            that answers 429.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">07 · Android camera scan and vouch</span>
+          <span class="proof-count">VouchViewModelTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-scan" aria-label="Copy the Android vouch test command">Copy<span class="visually-hidden"> the Android vouch test command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-scan-label" tabindex="0"><code id="now-scan">apps\android\gradlew.bat -p apps\android :app:testDebugUnitTest `
+  --tests "*VouchViewModelTest*"</code></pre>
+            <span id="now-scan-label" hidden>Android vouch test command</span>
+          </div>
+          <p>
+            <strong>Green means</strong> the scan confirm refuses a non-<code>pending</code>
+            session (the server reports expired, claimed and vouched as a 200 with a
+            <code>state</code>), and a successful vouch wraps the content key to the PC’s
+            public key and posts the 60-byte blob.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> scan an expired or already-claimed QR. The
+            confirm screen must refuse it before any wrap is posted.
+          </p>
+        </div>
+      </details>
+
+      <details class="proof">
+        <summary>
+          <span class="proof-title">08 · Client follow-ups</span>
+          <span class="proof-count">BackendSessionTest · PairingGateTest</span>
+        </summary>
+        <div class="proof-body">
+          <p><strong>Run</strong></p>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="now-followups" aria-label="Copy the client follow-up test commands">Copy<span class="visually-hidden"> the client follow-up test commands</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="now-followups-label" tabindex="0"><code id="now-followups">apps\android\gradlew.bat -p apps\android :app:testDebugUnitTest `
+  --tests "*BackendSessionTest*"
+
+apps\android\gradlew.bat -p apps\windows\sidecar test `
+  --tests "*PairingGateTest*"</code></pre>
+            <span id="now-followups-label" hidden>Client follow-up test commands</span>
+          </div>
+          <p>
+            <strong>Green means</strong> a delivered <code>diag.*</code> is acked on the socket
+            it arrived on even when the handler throws; and a second concurrent
+            <code>backend.pair</code> is refused with <code>ok=false, error="already
+            pairing"</code> while the first keeps running.
+          </p>
+          <p>
+            <strong>Try to break it:</strong> send a <code>diag.ping</code> to a handler that
+            throws, or start two <code>backend.pair</code> commands at once. The socket must
+            survive the first, and the second must not corrupt the session file.
+          </p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Run the whole branch</summary>
+        <p>
+          These are the four commands behind the 228 / 98 / 91 / 91 counts. The backend
+          suite needs Docker; the others do not.
+        </p>
+        <div class="code-block">
+          <button type="button" class="copy-button" command="--copy" commandfor="now-full" aria-label="Copy the full branch test commands">Copy<span class="visually-hidden"> the full branch test commands</span></button><span class="tip" role="status"></span>
+          <pre role="region" aria-labelledby="now-full-label" tabindex="0"><code id="now-full">apps\android\gradlew.bat -p services\backend :test --rerun-tasks
+apps\android\gradlew.bat -p apps\android :backend:test --rerun-tasks
+apps\android\gradlew.bat -p apps\android :app:testDebugUnitTest --rerun-tasks
+apps\android\gradlew.bat -p apps\windows\sidecar test --rerun-tasks</code></pre>
+          <span id="now-full-label" hidden>Full branch test commands</span>
+        </div>
+      </details>
+    </section>
+
+    <section id="console" tabindex="-1" aria-labelledby="console-title">
+      <h2 id="console-title">The console</h2>
+      <p class="section-intro">
+        The console is a plain server-rendered set of pages, so checking it is a browser
+        and two environment values. It needs the admin lookups, which need a superuser
+        database; on a managed Postgres without one the pages that read tenant rows answer
+        503.
+      </p>
+
+      <div class="callout warn">
+        <p class="callout-label">Start it against a database you control</p>
+        <p>
+          The console reads the household lookup, so run it where
+          <code>HOPA_ADMIN_LOOKUPS=true</code> and the <code>hopa_admin</code> role exists
+          (the local fallback or a self-managed Postgres). Seed one admin with
+          <code>HOPA_ADMIN_EMAIL</code> and <code>HOPA_ADMIN_PASSWORD</code>, or insert a row.
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <h3>Start the backend</h3>
+          <div class="code-block">
+            <button type="button" class="copy-button" command="--copy" commandfor="console-start" aria-label="Copy the backend start command">Copy<span class="visually-hidden"> the backend start command</span></button><span class="tip" role="status"></span>
+            <pre role="region" aria-labelledby="console-start-label" tabindex="0"><code id="console-start">$env:DATABASE_URL = "postgres://postgres:hopa@127.0.0.1:5432/hopa"
+$env:HOPA_ADMIN_EMAIL = "admin@hopa.test"
+$env:HOPA_ADMIN_PASSWORD = "a-long-bootstrap-password"
+$env:HOPA_ADMIN_LOOKUPS = "true"
+
+apps\android\gradlew.bat -p services\backend run</code></pre>
+            <span id="console-start-label" hidden>Backend start command</span>
+          </div>
+          <p>
+            <strong>Expected:</strong> the migrations apply, the admin seed upserts, and the
+            server prints <code>Responding at http://0.0.0.0:8080</code>.
+          </p>
+        </li>
+        <li>
+          <h3>Sign in and look a household up</h3>
+          <p>
+            Open <code>http://127.0.0.1:8080/console</code>. It redirects to
+            <code>/console/sign-in</code>; sign in with the seeded email and password. The
+            cookie is <code>HttpOnly</code>, <code>Secure</code> and
+            <code>SameSite=Lax</code>. Then open <code>/console/lookup</code> and query a
+            phone, a member id or a household id.
+          </p>
+          <p>
+            <strong>Expected:</strong> the row shows the household id and the masked phone,
+            and the server logs one <code>admin.pii.read</code> line with a hash — never the
+            phone.
+          </p>
+        </li>
+        <li>
+          <h3>Send a diagnostic</h3>
+          <p>
+            Open a device page (<code>/console/device/&lt;id&gt;?household=&lt;id&gt;</code>) and
+            send a <code>diag.ping</code>.
+          </p>
+          <p>
+            <strong>Expected:</strong> 202 with a task id and trace; the page shows the audit
+            confirmation; with no socket the task stays <code>queued</code> and delivers on
+            the next hello.
+          </p>
+        </li>
+      </ol>
+    </section>
+
+    <section id="android" tabindex="-1" aria-labelledby="android-title">
+      <h2 id="android-title">Android: sign in and scan</h2>
+      <p class="section-intro">
+        The app runs in two modes. Point it at a gateway to sign up and sign in; leave the
+        URL blank to stay local-only. The scan flow needs a PC that is already showing its
+        pairing QR. The manual device run is the deferred exit check, not a branch test.
+      </p>
+
+      <ul class="plain-list">
+        <li>
+          <strong>Point the app at a gateway.</strong> Build with the debug
+          <code>buildConfigField</code> from <code>local.properties</code>, or set the stored
+          backend URL in Settings. A blank URL is the local-only mode.
+        </li>
+        <li>
+          <strong>Sign up, then sign in.</strong> Sign-up creates the household-of-one and
+          the first device; sign-in on the same account mints a signed-in device. The
+          banner appears when the gateway is unreachable and the app falls back to
+          local-only.
+        </li>
+        <li>
+          <strong>Admit a PC.</strong> Start the sidecar with
+          <code>--pair-backend &lt;url&gt;</code>, scan its QR (or paste the
+          <code>hopa://pair</code> string), check the fingerprint, and confirm. The phone
+          wraps the key and the PC claims it; the PC’s gateway then opens.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <p class="callout-label">Paste is the fallback, not a lesser path</p>
+        <p>
+          The camera scan is the user flow, but the paste field ships in the same build. If
+          the camera is unavailable, paste the <code>hopa://pair</code> string; it reaches
+          the same confirm screen and the same vouch.
+        </p>
+      </div>
+    </section>
+
+    <section id="later" tabindex="-1" aria-labelledby="later-title">
+      <h2 id="later-title">After Lane B</h2>
+      <p class="section-intro">
+        These are the week-2 exit checks. Four are proven by the branch; the rest need a
+        phone, a camera, a deploy or all three. Keep them separate from the contract result.
+      </p>
+
+      <div class="table-wrap" role="region" tabindex="0" aria-labelledby="later-caption">
+        <table class="fit-headers">
+          <caption id="later-caption">Week-2 exit check status</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Check</th>
+              <th scope="col">Status</th>
+              <th scope="col">What to run or record</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">1</th>
+              <td data-label="Check">A turn typed on the phone appears on the PC, and back, in ≤ 2 s.</td>
+              <td data-label="Status">Needs a deploy + sync v0</td>
+              <td data-label="What to run or record">Record both timestamps and the trace ids in <code>docs/project/evidence/B2-accounts.md</code>. Sync v0 is outside this slice.</td>
+            </tr>
+            <tr>
+              <th scope="row">2</th>
+              <td data-label="Check">A revoked device is cut off: socket closed ≤ 5 s, refresh refused, wrap gone.</td>
+              <td data-label="Status">Automated half proven; manual timing pending</td>
+              <td data-label="What to run or record"><code>DeviceRevokeTest</code>, <code>TokenRotationTest</code>; add a manual stopwatch line.</td>
+            </tr>
+            <tr>
+              <th scope="row">3</th>
+              <td data-label="Check">A camera-scanned QR admits a PC that runs one task each way, 20/20 with encrypted bodies.</td>
+              <td data-label="Status">Needs the real camera</td>
+              <td data-label="What to run or record"><code>AdmissionTest</code>, <code>BackendPairingTest</code>, <code>BackendGatewayTest</code>, <code>VouchViewModelTest</code> now; the real scan is the manual run.</td>
+            </tr>
+            <tr>
+              <th scope="row">4</th>
+              <td data-label="Check">Sign-up → sign-in round trip on the phone; second sign-in gets a signed-in device.</td>
+              <td data-label="Status">Proven</td>
+              <td data-label="What to run or record"><code>AccountRoutesTest</code>; repeat on a real phone for the device run.</td>
+            </tr>
+            <tr>
+              <th scope="row">5</th>
+              <td data-label="Check">SMS clash policy with the flag on and a fake <code>SmsPort</code>.</td>
+              <td data-label="Status">Proven</td>
+              <td data-label="What to run or record"><code>OtpTest</code>.</td>
+            </tr>
+            <tr>
+              <th scope="row">6</th>
+              <td data-label="Check">Console lookup by phone, member id and household id; every read in the access log.</td>
+              <td data-label="Status">Proven when admin lookups are on</td>
+              <td data-label="What to run or record"><code>LookupTest</code>, <code>ConsoleTest</code>; needs a superuser database with <code>HOPA_ADMIN_LOOKUPS=true</code>.</td>
+            </tr>
+            <tr>
+              <th scope="row">7</th>
+              <td data-label="Check"><code>diag.ping</code> to an offline phone: queued, one FCM wake, arrives; audit names the admin.</td>
+              <td data-label="Status">Automated half proven; deployed arrival pending</td>
+              <td data-label="What to run or record"><code>DiagSendTest</code> with FakeFcm; <code>BackendSessionTest</code> for the device ack; repeat with a real push token.</td>
+            </tr>
+            <tr>
+              <th scope="row">8</th>
+              <td data-label="Check">Cross-tenant suite still green: 1,000 attempts, zero rows.</td>
+              <td data-label="Status">Proven</td>
+              <td data-label="What to run or record"><code>TenantIsolationTest</code>, extended with accounts and wraps; CI job.</td>
+            </tr>
+            <tr>
+              <th scope="row">9</th>
+              <td data-label="Check">No plaintext payload or phone number in the week’s logs.</td>
+              <td data-label="Status">Needs the deployed week’s logs</td>
+              <td data-label="What to run or record">Grep the live logs for the week; paste the command and the clean result into the evidence file. The PII line carries a hash, never the phone.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <p class="callout-label">Do not mark the week green early</p>
+        <p>
+          Checks 4, 5, 6 and 8 are proven by the branch. The week is not complete until a
+          real phone signs up and signs in, a real camera admits a PC, one encrypted task
+          crosses each way on the live core, and the deployed week’s log grep is clean — with
+          trace ids in <code>docs/project/evidence/B2-accounts.md</code>.
+        </p>
+      </div>
+    </section>
+
+    <section id="trouble" tabindex="-1" aria-labelledby="trouble-title">
+      <h2 id="trouble-title">Troubleshooting</h2>
+      <p class="section-intro">
+        The refusals are deliberately uniform in places. Read the code and the condition
+        before assuming the happy path is broken.
+      </p>
+
+      <div class="table-wrap" role="region" tabindex="0" aria-labelledby="trouble-caption">
+        <table>
+          <caption id="trouble-caption">Symptom → cause → fix</caption>
+          <thead>
+            <tr>
+              <th scope="col">Symptom</th>
+              <th scope="col">Likely cause</th>
+              <th scope="col">Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Sign-up or sign-in answers <code>E_AUTH</code></th>
+              <td data-label="Likely cause">A wrong password, an unknown phone, or a duplicate sign-up race — all deliberately uniform.</td>
+              <td data-label="Fix">Check the phone normalizes to E.164 and the password matches. Do not expect a different code; the uniformity is the design (no enumeration).</td>
+            </tr>
+            <tr>
+              <th scope="row">The admin console answers 401 <code>E_AUTH</code></th>
+              <td data-label="Likely cause">No admin session, an expired token, or a household device token on <code>/v1/admin/*</code>.</td>
+              <td data-label="Fix">Sign in through <code>/v1/admin/session</code> (or the console form). A device token is refused on purpose; the admin resolver only knows <code>admin_sessions</code>.</td>
+            </tr>
+            <tr>
+              <th scope="row">The lookup route answers 503 <code>E_UNSUPPORTED</code></th>
+              <td data-label="Likely cause"><code>HOPA_ADMIN_LOOKUPS=false</code>, or the database has no <code>hopa_admin</code> role, so the definer functions were never provisioned.</td>
+              <td data-label="Fix">Run on a superuser database with <code>HOPA_ADMIN_LOOKUPS=true</code>. The sign-in route still works; only the tenant reads are gated.</td>
+            </tr>
+            <tr>
+              <th scope="row">The lookup returns <code>[]</code></th>
+              <td data-label="Likely cause">The query is well-formed but matches nothing, or the account is tombstoned (<code>deleted_at</code> set).</td>
+              <td data-label="Fix">Expected. A tombstoned account renders no phone and <code>accountStatus=none</code>; it is hidden, not an error.</td>
+            </tr>
+            <tr>
+              <th scope="row">The console sign-in answers 403</th>
+              <td data-label="Likely cause">The form carried a cross-site <code>Origin</code> (login CSRF).</td>
+              <td data-label="Fix">Submit the form from the same host the page was served on. A missing or same-host Origin is allowed.</td>
+            </tr>
+            <tr>
+              <th scope="row">The console form answers 413</th>
+              <td data-label="Likely cause">The body is larger than the 64 KiB cap.</td>
+              <td data-label="Fix">Trim the field. The console shares the JSON routes’ body cap; an oversized unauthenticated body is refused, not buffered.</td>
+            </tr>
+            <tr>
+              <th scope="row">OTP routes answer <code>E_UNSUPPORTED</code></th>
+              <td data-label="Likely cause"><code>HOPA_SMS_ENABLED</code> is not <code>true</code> (it is false by default).</td>
+              <td data-label="Fix">Set <code>HOPA_SMS_ENABLED=true</code> to wire the log-only <code>SmsPort</code>. There is no real vendor; the code is logged at INFO, never the phone.</td>
+            </tr>
+            <tr>
+              <th scope="row">Android stays local-only when a gateway is set</th>
+              <td data-label="Likely cause">The stored <code>backendUrl</code> is blank, or the gateway is unreachable and the app degraded to local-only.</td>
+              <td data-label="Fix">Set the backend URL in Settings (or the debug <code>buildConfigField</code>) and check the banner. The launch decision re-decides when the URL or identity changes.</td>
+            </tr>
+            <tr>
+              <th scope="row">The scan confirm refuses a QR</th>
+              <td data-label="Likely cause">The pending session is expired, already vouched or already claimed; the server reports it as a 200 with a <code>state</code>.</td>
+              <td data-label="Fix">Mint a fresh QR on the PC and scan again within five minutes. Only a <code>pending</code> session can be vouched.</td>
+            </tr>
+            <tr>
+              <th scope="row">The vouch fails with <code>E_SCHEMA</code></th>
+              <td data-label="Likely cause">The wrap is not exactly 60 bytes, or the session is unknown/expired/claimed.</td>
+              <td data-label="Fix">Use <code>KeyWrap.wrapForDevice</code> for this PC key and voucher key; a second vouch is intentionally indistinguishable from an unknown one.</td>
+            </tr>
+            <tr>
+              <th scope="row">A delivered <code>diag.*</code> is never acked</th>
+              <td data-label="Likely cause">The Android link did not wire <code>onDiagnostic</code>, or the handler threw before the ack.</td>
+              <td data-label="Fix">The session acks in a <code>finally</code>, so a throwing handler still acks. Check <code>BackendSessionTest</code> if it regresses.</td>
+            </tr>
+            <tr>
+              <th scope="row">The sidecar answers a second <code>backend.pair</code> with <code>ok=false</code></th>
+              <td data-label="Likely cause">A pairing is already in flight.</td>
+              <td data-label="Fix">Expected: one concurrent pairing at a time. Wait for the first to finish or fail, then retry.</td>
+            </tr>
+            <tr>
+              <th scope="row">Backend tests cannot find Docker</th>
+              <td data-label="Likely cause">Testcontainers needs a running engine.</td>
+              <td data-label="Fix">Start Docker Desktop. The shared client, app and sidecar suites do not need it.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="evidence" tabindex="-1" aria-labelledby="evidence-title">
+      <h2 id="evidence-title">Evidence</h2>
+      <p class="section-intro">
+        Every claim on this page comes from one of these. The week-2 plan is the index; the
+        test sources are the authority when the prose and the code disagree.
+      </p>
+
+      <ul class="plain-list">
+        <li><a href="week2.md">Week 2 plan and execution record</a> — tasks, review findings, the lane A sync (§11.7) and the exit checks.</li>
+        <li><a href="tasks/week2b.md">Lane B slice</a> — the task-by-task plan with interfaces and commands.</li>
+        <li><a href="week2-lane-a.html">Lane A verification guide</a> — the sibling page and the visual system this one extends.</li>
+        <li><a href="../../../superpowers/specs/2026-11-22-pairing-accounts-design.md">Pairing and accounts design</a> — the source decisions behind the account, key and admission model.</li>
+        <li><a href="../../../../spec/openapi/backend.v1.yaml">Backend OpenAPI</a> — the account, session, OTP and admin contracts.</li>
+        <li><a href="../../../../services/backend/src/test/kotlin/com/hopa/backend/accounts/AccountRoutesTest.kt"><code>AccountRoutesTest</code></a> — sign-up, sign-in and the uniform refusals.</li>
+        <li><a href="../../../../services/backend/src/test/kotlin/com/hopa/backend/accounts/OtpTest.kt"><code>OtpTest</code></a> — the SMS clash policy and the unverified takeover.</li>
+        <li><a href="../../../../services/backend/src/test/kotlin/com/hopa/backend/admin/LookupTest.kt"><code>LookupTest</code></a> — the admin session, the household lookup and the PII log.</li>
+        <li><a href="../../../../services/backend/src/test/kotlin/com/hopa/backend/console/ConsoleTest.kt"><code>ConsoleTest</code></a> — the pages, the cookie, the CSRF guard and the no-payload scan.</li>
+        <li><a href="../../../../apps/android/app/src/test/kotlin/com/hopa/app/account/SignInViewModelTest.kt"><code>SignInViewModelTest</code></a> and <a href="../../../../apps/android/app/src/test/kotlin/com/hopa/app/pair/VouchViewModelTest.kt"><code>VouchViewModelTest</code></a> — the Android sign-in and scan.</li>
+        <li><a href="../../../../services/backend/src/main/resources/db/admin/V5__admin_lookups.sql"><code>db/admin/V5__admin_lookups.sql</code></a> — the optional admin role and the three resolvers that return <code>account_id</code>.</li>
+        <li><a href="../../../../docs/project/evidence/B2-accounts.md"><code>B2-accounts.md</code></a> — the evidence file the manual checks fill in.</li>
+        <li><a href="https://github.com/agents-demo/hopa/pull/140">PR #140</a> — lane A, merged to <code>main</code> at <code>27737540</code>.</li>
+      </ul>
+
+      <div class="callout">
+        <p class="callout-label">What is still missing</p>
+        <p>
+          One manual end-to-end run on the live core: a real phone signs up and signs in, a
+          real camera admits a PC, one encrypted task crosses each way, and the deployed
+          week’s log grep is clean — with trace ids in
+          <code>docs/project/evidence/B2-accounts.md</code>. Sync v0 (the turn round trip) is
+          a separate week-3 slice.
+        </p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>
+        Code head <code>d2c8cba2</code> on <code>backend-week2-B</code> (23 Nov 2026),
+        rebased onto <code>main</code> at <code>27737540</code> after lane A’s PR #140 merged.
+        The lane A sync (§11.7) folds the <code>account_id</code> resolvers into the optional
+        <code>db/admin</code> migration and gates the lookup route behind
+        <code>adminLookupsAvailable</code>.
+      </p>
+      <p>
+        This page contains no access token, refresh token, bootstrap token, content key,
+        wrap or phone number. The commands use throwaway values; delete the local database,
+        the sidecar data directory, and any smoke devices when finished.
+      </p>
+      <p>
+        Static page. Open it directly in a browser; it needs no server and no network.
+        Print it to keep the evidence checklist, including the closed sections.
+      </p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

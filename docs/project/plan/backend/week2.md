@@ -5,8 +5,9 @@ Status: **lane A implemented, 2026-11-22** — branch `backend-week2-A`
 Written 2026-11-22. Parent: [`weekly-plan.md`](weekly-plan.md),
 tracked in [#32](https://github.com/agents-demo/hopa/issues/32). Design source:
 [`docs/superpowers/specs/2026-11-22-pairing-accounts-design.md`](../../../superpowers/specs/2026-11-22-pairing-accounts-design.md)
-(decisions below argue from it, not from this file). Verification guide:
-[`week2-lane-a.html`](week2-lane-a.html).
+(decisions below argue from it, not from this file). Verification guides:
+[`week2-lane-a.html`](week2-lane-a.html) (backend/Windows) and
+[`week2-lane-b.html`](week2-lane-b.html) (accounts, console and Android).
 
 The week replaces the operator bootstrap flow with a real user: the phone signs up
 with a phone number and password and becomes the household's first device, the PC
