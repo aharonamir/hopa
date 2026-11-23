@@ -108,10 +108,73 @@ class VouchViewModelTest {
     }
 
     @Test
-    fun `an expired or claimed session surfaces E_SCHEMA and stays on the scan screen`() = runTest(dispatcher) {
+    fun `an expired session stays on the scan screen with a plain message`() = runTest(dispatcher) {
+        val keys = keys()
+        val server = server(MockResponse().setResponseCode(200).setBody(resolveResponse(keys, "expired")))
+        try {
+            val viewModel = VouchViewModel(
+                settings = FakeSettings(keys.phonePrivateKey, contentKey(), "at1"),
+                pairing = { BackendPairing(it, dispatcher = dispatcher) },
+            )
+
+            viewModel.resolve(AdmissionLink("s1", gateway(server)))
+            advanceUntilIdle()
+
+            assertEquals("This pairing session has expired.", viewModel.state.value.error)
+            assertNull(viewModel.state.value.confirm)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `a claimed session stays on the scan screen with a plain message`() = runTest(dispatcher) {
+        val keys = keys()
+        val server = server(MockResponse().setResponseCode(200).setBody(resolveResponse(keys, "claimed")))
+        try {
+            val viewModel = VouchViewModel(
+                settings = FakeSettings(keys.phonePrivateKey, contentKey(), "at1"),
+                pairing = { BackendPairing(it, dispatcher = dispatcher) },
+            )
+
+            viewModel.resolve(AdmissionLink("s1", gateway(server)))
+            advanceUntilIdle()
+
+            assertEquals("This pairing session has already been claimed.", viewModel.state.value.error)
+            assertNull(viewModel.state.value.confirm)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `an already vouched session stays on the scan screen with a plain message`() = runTest(dispatcher) {
+        val keys = keys()
+        val server = server(MockResponse().setResponseCode(200).setBody(resolveResponse(keys, "vouched")))
+        try {
+            val viewModel = VouchViewModel(
+                settings = FakeSettings(keys.phonePrivateKey, contentKey(), "at1"),
+                pairing = { BackendPairing(it, dispatcher = dispatcher) },
+            )
+
+            viewModel.resolve(AdmissionLink("s1", gateway(server)))
+            advanceUntilIdle()
+
+            assertEquals(
+                "This pairing session was already approved on another phone.",
+                viewModel.state.value.error,
+            )
+            assertNull(viewModel.state.value.confirm)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `an unknown secret surfaces E_SCHEMA and stays on the scan screen`() = runTest(dispatcher) {
         val keys = keys()
         val server = server(
-            MockResponse().setResponseCode(400).setBody("""{"code":"E_SCHEMA","message":"expired"}"""),
+            MockResponse().setResponseCode(400).setBody("""{"code":"E_SCHEMA","message":"unknown pairing session"}"""),
         )
         try {
             val viewModel = VouchViewModel(
@@ -227,9 +290,9 @@ class VouchViewModelTest {
 
     private fun contentKey(): ByteArray = ByteArray(32) { (it + 1).toByte() }
 
-    private fun resolveResponse(keys: Keys): String {
+    private fun resolveResponse(keys: Keys, state: String = "pending"): String {
         val publicKey = Base64.getUrlEncoder().withoutPadding().encodeToString(keys.pcPublicKey)
-        return "{\"sessionId\":\"sid\",\"state\":\"pending\",\"name\":\"Studio\",\"platform\":\"windows\"," +
+        return "{\"sessionId\":\"sid\",\"state\":\"$state\",\"name\":\"Studio\",\"platform\":\"windows\"," +
             "\"publicKey\":\"$publicKey\",\"fingerprint\":\"abcd1234\",\"expiresAt\":\"2026-11-23T00:05:00Z\"}"
     }
 

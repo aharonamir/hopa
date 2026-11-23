@@ -99,6 +99,13 @@ class VouchViewModel(
         _state.update { it.copy(busy = true, error = null) }
         try {
             val pending = pairing(gatewayUrl).pollPending(secret)
+            if (pending.state != "pending") {
+                // The server reports expired/claimed/vouched as a 200 with a state,
+                // so refuse here instead of asking the phone to vouch for a session
+                // that is already dead.
+                _state.update { it.copy(busy = false, confirm = null, error = stateMessage(pending.state)) }
+                return
+            }
             session = PendingSession(secret = secret, publicKey = pending.publicKey, gatewayUrl = gatewayUrl)
             _state.update {
                 it.copy(
@@ -110,14 +117,21 @@ class VouchViewModel(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (refused: BackendPairingFailure.Refused) {
-            // Expired or claimed: show the server's code and stay on the scan
-            // screen, never a confirm state.
+            // Unknown secret: show the server's code and stay on the scan screen.
             _state.update { it.copy(busy = false, confirm = null, error = refusedCode(refused)) }
         } catch (unavailable: BackendPairingFailure.Unavailable) {
             _state.update { it.copy(busy = false, confirm = null, error = unavailable.message) }
         } catch (error: Exception) {
             _state.update { it.copy(busy = false, confirm = null, error = COULD_NOT_READ) }
         }
+    }
+
+    /** A plain message for a session that can no longer be vouched for. */
+    private fun stateMessage(state: String): String = when (state) {
+        "expired" -> EXPIRED
+        "claimed" -> CLAIMED
+        "vouched" -> VOUCHED_ELSEWHERE
+        else -> COULD_NOT_READ
     }
 
     /** "pairing refused: E_SCHEMA …" -> "E_SCHEMA". */
@@ -137,6 +151,9 @@ class VouchViewModel(
         const val NOT_A_CODE = "That is not a PC pairing code."
         const val COULD_NOT_READ = "Could not read this pairing code."
         const val COULD_NOT_VOUCH = "Could not vouch for this PC."
+        const val EXPIRED = "This pairing session has expired."
+        const val CLAIMED = "This pairing session has already been claimed."
+        const val VOUCHED_ELSEWHERE = "This pairing session was already approved on another phone."
         const val REFUSED_PREFIX = "pairing refused: "
     }
 }
