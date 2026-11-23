@@ -44,6 +44,7 @@ fun BackendCard(
     onPair: (String, String) -> Unit,
     onDisconnect: () -> Unit,
     onRefresh: () -> Unit,
+    onScanPc: () -> Unit = {},
 ) {
     var url by rememberSaveable { mutableStateOf(state.backendUrl) }
     var text by rememberSaveable { mutableStateOf("") }
@@ -115,6 +116,13 @@ fun BackendCard(
                 TextButton(onClick = onRefresh) {
                     Text("Refresh", fontSize = 13.sp, color = HopaColor.Primary)
                 }
+            }
+            OutlinedButton(
+                onClick = onScanPc,
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Scan PC QR")
             }
             state.backendStatus?.let { message ->
                 Text(

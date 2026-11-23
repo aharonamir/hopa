@@ -12,6 +12,7 @@ import com.hopa.feature.settings.SettingsViewModel
 fun ComputerRoute(
     onBack: () -> Unit,
     showGatewayPairing: Boolean = true,
+    onScanPc: () -> Unit = {},
 ) {
     val viewModel: SettingsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -26,5 +27,6 @@ fun ComputerRoute(
         onDisconnectBackend = viewModel::disconnectBackend,
         onRefreshBackend = viewModel::refresh,
         showGatewayPairing = showGatewayPairing,
+        onScanPc = onScanPc,
     )
 }

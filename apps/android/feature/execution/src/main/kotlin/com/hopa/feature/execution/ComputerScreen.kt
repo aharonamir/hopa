@@ -50,6 +50,7 @@ fun ComputerScreen(
     onDisconnectBackend: () -> Unit,
     onRefreshBackend: () -> Unit,
     showGatewayPairing: Boolean = true,
+    onScanPc: () -> Unit = {},
 ) {
     var url by rememberSaveable { mutableStateOf(state.settings.bridgeUrl) }
     var code by rememberSaveable { mutableStateOf("") }
@@ -102,6 +103,7 @@ fun ComputerScreen(
                 BackendCard(
                     state = state, onPair = onPairBackend,
                     onDisconnect = onDisconnectBackend, onRefresh = onRefreshBackend,
+                    onScanPc = onScanPc,
                 )
             }
 

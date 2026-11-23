@@ -1,5 +1,7 @@
 package com.hopa.feature.settings
 
+import com.hopa.backend.pairing.AdmissionLink
+import com.hopa.backend.pairing.AdmissionLinks
 import com.hopa.backend.pairing.PairingLink
 import com.hopa.backend.pairing.PairingLinks
 
@@ -11,4 +13,11 @@ import com.hopa.backend.pairing.PairingLinks
 object PairInput {
     fun normalise(text: String, fallbackGatewayUrl: String): PairingLink? =
         PairingLinks.parse(text, fallbackGatewayUrl)
+
+    /**
+     * The pending-admission QR a PC shows to a phone: `hopa://pair?v=1&s=…&u=…`.
+     * Unlike [normalise], it carries no household and refuses an `h` parameter,
+     * so an operator link pasted into the scan screen is never mistaken for one.
+     */
+    fun admission(text: String): AdmissionLink? = AdmissionLinks.parse(text)
 }

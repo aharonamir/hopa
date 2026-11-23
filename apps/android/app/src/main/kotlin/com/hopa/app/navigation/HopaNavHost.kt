@@ -16,6 +16,7 @@ import androidx.navigation.toRoute
 import com.hopa.app.BuildConfig
 import com.hopa.app.account.SignInRoute
 import com.hopa.app.di.AppContainer
+import com.hopa.app.pair.ScanRoute
 import com.hopa.backend.pairing.AccountClient
 import com.hopa.ui.theme.HopaColor
 import com.hopa.feature.browser.BrowserRoute
@@ -186,6 +187,14 @@ fun HopaNavHost(container: AppContainer, initialGoal: String = "") {
             ComputerRoute(
                 onBack = { navController.popBackStack() },
                 showGatewayPairing = resolved.decision.showGatewayPairing,
+                onScanPc = { navController.navigate(HopaDestination.Scan) },
+            )
+        }
+        composable<HopaDestination.Scan> {
+            ScanRoute(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onVouched = { navController.popBackStack() },
             )
         }
         composable<HopaDestination.SelfCheck> {

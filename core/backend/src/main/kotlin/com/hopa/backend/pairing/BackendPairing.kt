@@ -1,6 +1,7 @@
 package com.hopa.backend.pairing
 
 import com.hopa.contracts.json.HopaJson
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit
 class BackendPairing(
     private val gatewayUrl: String,
     private val http: OkHttpClient = OkHttpClient(),
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val base = BackendUrls.httpBase(gatewayUrl)
 
@@ -100,6 +102,24 @@ class BackendPairing(
         return state
     }
 
+    /**
+     * A signed-in phone vouches for a pending PC session by parking the wrap of
+     * the household content key on it. The secret names the session in the QR;
+     * the access token is the phone's own bearer. Neither, nor the wrap, is put
+     * in a message here.
+     */
+    suspend fun vouch(sessionSecret: String, wrappedKey: String, accessToken: String) {
+        post(
+            path = "/v1/pair/vouch",
+            body = buildJsonObject {
+                put("sessionSecret", sessionSecret)
+                put("wrappedKey", wrappedKey)
+            }.toString(),
+            secrets = listOf(sessionSecret, accessToken, wrappedKey),
+            bearer = accessToken,
+        )
+    }
+
     /** Claim a vouched pending session and receive the wrap parked for this key. */
     suspend fun claimPending(secret: String, name: String, publicKey: String): ClaimedSession {
         val payload = post(
@@ -141,12 +161,15 @@ class BackendPairing(
         return credentials
     }
 
-    private suspend fun post(path: String, body: String, secrets: List<String>): JsonObject =
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
+    private suspend fun post(path: String, body: String, secrets: List<String>, bearer: String? = null): JsonObject =
+        withContext(dispatcher) {
+            val builder = Request.Builder()
                 .url(base + path)
                 .post(body.toRequestBody(JSON))
-                .build()
+            if (bearer != null) {
+                builder.header("Authorization", "Bearer $bearer")
+            }
+            val request = builder.build()
             val client = http.newBuilder().callTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
             val response = try {
                 client.newCall(request).execute()

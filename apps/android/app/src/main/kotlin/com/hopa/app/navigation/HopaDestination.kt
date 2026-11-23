@@ -61,6 +61,9 @@ sealed interface HopaDestination {
     data object Computer : HopaDestination
 
     @Serializable
+    data object Scan : HopaDestination
+
+    @Serializable
     data object SelfCheck : HopaDestination
 
     @Serializable
