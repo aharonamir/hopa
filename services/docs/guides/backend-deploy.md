@@ -66,16 +66,14 @@ create role hopa_admin nologin bypassrls;
 ```
 
 The migration also requires the role running Flyway to be able to alter function
-owners. Either:
-
-- run the migration as a database **superuser**; or
-- grant the migration role `hopa_admin` **with admin option, set false** for the
-  duration of the migration, and revoke it afterwards.
-
-The latter path is only temporary. Before the migration's final guard, the
-deploy role must have no residual `ADMIN OPTION` on `hopa_admin`; otherwise V2
-fails loudly with the operator line to run. After the migration, verify both
-roles:
+owners, so **run the migration as a database superuser** (the Render database
+owner). A non-superuser deploy role cannot satisfy both requirements at once:
+it must hold `hopa_admin` membership to alter the function owners, but V2's
+final residual-capability guard refuses any non-superuser that can still
+`SET ROLE` into `hopa_admin` or still holds `ADMIN OPTION` on it, and the
+migration can revoke only its own self-grant — an operator's temporary grant
+stays visible to `pg_has_role(..., 'set')` and the `pg_auth_members` scan, so it
+trips the guard. After the migration, verify both roles:
 
 ```sql
 -- hopa_admin must be nologin + bypassrls; the runtime role must not be superuser.
@@ -103,18 +101,14 @@ BYPASSRLS owner defeats RLS.
 
 `V5__admin_account_id.sql` drops and recreates the two `hopa_admin`-owned
 resolvers `admin_resolve_member` and `admin_resolve_household` (adding
-`account_id`), so it needs the **same temporary provisioning as V2**. This is
-required on **every existing database** that reaches V5, not only the first V2
-run: on a V2-V4 database with a non-superuser deploy role, V5 fails until the
-provisioning is re-applied.
+`account_id`). The drop has the same requirement as V2: **run the migration as a
+database superuser** (the Render database owner). This is required on **every
+existing database** that reaches V5, not only the first V2 run — on a V2-V4
+database with a non-superuser deploy role, V5 fails until the superuser run is
+performed.
 
-Re-run one of the two paths above:
-
-- run the migration as a database **superuser**; or
-- grant the migration role `hopa_admin` **with admin option** for the duration
-  of the migration, then revoke it and re-check the two residual queries in
-  the previous section (`rolsuper`/`rolbypassrls` and the `pg_auth_members`
-  admin-option scan).
+Re-check the residual queries in the previous section (`rolsuper`/`rolbypassrls`
+and the `pg_auth_members` admin-option scan) after the migration.
 
 ## Free tier
 

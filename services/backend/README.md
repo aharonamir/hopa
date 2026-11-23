@@ -61,9 +61,10 @@ Admin lookups read tenant rows through four `SECURITY DEFINER` functions owned
 by `hopa_admin`, a non-login role with `BYPASSRLS`. `FORCE ROW LEVEL SECURITY`
 binds the table owner too, so these functions cannot be owned by the normal
 runtime role. The role must be provisioned once before the first V2 migration,
-and the migration role must be able to alter function owners (superuser, or
-temporary `hopa_admin` with `ADMIN OPTION` revoked afterwards). The exact SQL
-and the post-migration checks are in
+and the migration must be run by a **superuser** (the Render database owner): a
+non-superuser deploy role cannot both hold the `hopa_admin` membership needed to
+alter the function owners and pass the end-of-migration residual guard. The
+exact SQL and the post-migration checks are in
 [`services/docs/guides/backend-deploy.md`](../docs/guides/backend-deploy.md).
 
 ## Environment variables

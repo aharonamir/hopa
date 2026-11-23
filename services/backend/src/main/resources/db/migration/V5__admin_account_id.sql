@@ -11,10 +11,13 @@
 -- `admin_resolve_phone` (which already returns `account_id`) and
 -- `admin_list_devices` are unchanged.
 --
--- The drop below requires the same provisioning as V2: run this migration as a
--- superuser, or as a non-superuser deploy role that holds `hopa_admin` WITH
--- ADMIN OPTION (SET enabled) for the duration of the migration, so it can drop
--- and re-own the two `hopa_admin`-owned functions.
+-- The drop below requires a **superuser** run (the Render database owner): a
+-- non-superuser deploy role cannot both hold the `hopa_admin` membership needed
+-- to drop and re-own the two `hopa_admin`-owned functions and pass the
+-- residual-capability guard at the end of the migration, which refuses any
+-- non-superuser that can still `SET ROLE` into `hopa_admin` or still holds
+-- `ADMIN OPTION` on it. The migration can revoke only its own self-grant, so an
+-- operator's temporary grant would remain visible to the guard and fail it.
 
 drop function admin_resolve_member(uuid);
 drop function admin_resolve_household(uuid);
