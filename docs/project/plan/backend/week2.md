@@ -100,16 +100,19 @@ Follow-up migrations landed by lane A (V2 is the base schema above):
 nullable and additive. `tasks.type` / nullable `from_device` are in V2 (R1, R11).
 
 Plus four `SECURITY DEFINER` functions owned by the non-login `hopa_admin`
-(`BYPASSRLS`) role, each returning minimum columns and audit-logged by the caller:
-`admin_resolve_member(member uuid)` and `admin_resolve_household(household uuid)`
-return `(household_id, member_id, display_name)`; `admin_resolve_phone(phone text)`
-also returns `account_id` (four columns); `admin_list_devices(household uuid)`
-returns `(device_id, platform, name, last_seen_at, revoked_at)`. The app role has
-no `BYPASSRLS` and no blanket tenant GUC.
-
-`V5__admin_account_id.sql` adds `account_id` to `admin_resolve_member` and
-`admin_resolve_household` so a lookup by member or household id can also return
-the account fields (phone, verified, account status).
+(`BYPASSRLS`) role, each returning minimum columns and audit-logged by the caller.
+They live in the optional `db/admin/V5__admin_lookups.sql` migration, applied only
+when `HOPA_ADMIN_LOOKUPS=true` through `applyAdminLookups()` and its own Flyway
+history (`hopa_admin_schema_history`), because creating the BYPASSRLS owner needs
+a superuser (managed Postgres without one sets `HOPA_ADMIN_LOOKUPS=false` and the
+admin routes answer 503 `E_UNSUPPORTED`). The three resolvers —
+`admin_resolve_member(member uuid)`, `admin_resolve_household(household uuid)` and
+`admin_resolve_phone(phone text)` — each return `(household_id, member_id,
+display_name, account_id)`, so a lookup by member, household or phone id also
+returns the account fields (phone, verified, account status);
+`admin_list_devices(household uuid)` returns `(device_id, platform, name,
+last_seen_at, revoked_at)`. The app role has no `BYPASSRLS` and no blanket tenant
+GUC.
 
 Sync v0's tables (`threads`, `turns`, `device_cursors` — naming to be settled by
 Monday's mini-design) land in the same migration only if that design is agreed
@@ -458,3 +461,32 @@ was verified rather than re-run. Sync v0 stays outside this slice per the
 | 7 | automated half proven (`DiagSendTest`); device-level ack proven by `BackendSessionTest`; deployed arrival pending |
 | 8 | proven (`TenantIsolationTest`, 1,000 attempts) |
 | 9 | pending: grep of the deployed week's logs |
+
+### 11.7 Post-rebase sync with lane A (23 Nov 2026)
+
+After lane A's PR #140 merged to `main`, `backend-week2-B` was rebased onto the
+updated `main` and reconciled with lane A's post-`450f65b4` change that made the
+admin lookups optional (`11d7cb36`). The rebase resolved three text conflicts and
+the sync made these lane B pieces consistent with that refactor:
+
+- The `account_id` column on `admin_resolve_member`/`admin_resolve_household`
+  folded into the optional `db/admin/V5__admin_lookups.sql` (the three resolvers
+  now all return `account_id`); the core `V5__admin_account_id.sql` was removed
+  because it collided with `main`'s `V5__task_needs_approval.sql` and the
+  resolvers no longer live in the core migration.
+- `V5UpgradeTest` was removed: its "existing V1–V4 database" upgrade scenario no
+  longer exists once the resolvers live in a separate Flyway history and are
+  created fresh with `account_id`. The four-column shape and `hopa_admin`
+  ownership are asserted by `V2SchemaTest` through the harness's
+  `applyAdminLookups()`.
+- `GET /v1/admin/households` is now gated behind `adminLookupsAvailable` (503
+  `E_UNSUPPORTED` when `HOPA_ADMIN_LOOKUPS=false`), matching the device and diag
+  routes; `POST /v1/admin/session` stays ungated (it only touches the global
+  `admins`/`admin_sessions` tables).
+- `adminIdentity` and `adminLookupsAvailable` are shared `internal` helpers in
+  `AdminAuth.kt`, so the session, lookup, device and diag routes reuse one bearer
+  check and one gate.
+- Android: `clearBackend()` keeps lane A's reset to `DEFAULT_BACKEND_URL` and
+  lane B's content-key clear; `onDiagnostic` folded into the single `init` block
+  beside lane A's `onApproval`; the sidecar README keeps both the P1–P4 guide and
+  the turn-goal redaction note.

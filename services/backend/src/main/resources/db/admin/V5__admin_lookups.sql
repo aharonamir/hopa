@@ -59,12 +59,12 @@ grant usage on schema public to hopa_admin;
 grant select on accounts, members, devices, households to hopa_admin;
 
 create function admin_resolve_member(member uuid)
-returns table (household_id uuid, member_id uuid, display_name text)
+returns table (household_id uuid, member_id uuid, display_name text, account_id uuid)
 language sql
 security definer
 set search_path = public, pg_temp
 as $$
-    select m.household_id, m.id, m.display_name
+    select m.household_id, m.id, m.display_name, m.account_id
     from members m
     where m.id = $1
 $$;
@@ -85,12 +85,12 @@ as $$
 $$;
 
 create function admin_resolve_household(household uuid)
-returns table (household_id uuid, member_id uuid, display_name text)
+returns table (household_id uuid, member_id uuid, display_name text, account_id uuid)
 language sql
 security definer
 set search_path = public, pg_temp
 as $$
-    select m.household_id, m.id, m.display_name
+    select m.household_id, m.id, m.display_name, m.account_id
     from members m
     where m.household_id = $1
       and m.role = 'owner'

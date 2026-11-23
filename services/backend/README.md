@@ -50,21 +50,25 @@ fails the health check instead of serving half a schema.
 | Migration | Adds |
 |---|---|
 | `V1__init.sql` | households, members, devices, pairing_sessions, refresh/access tokens, tasks, task_events, idempotency_keys, trace_spans; RLS `FORCE` on all tenant tables |
-| `V2__accounts.sql` | accounts, household_key_wraps, admins, admin_sessions, pending_pairings; `members.account_id`; the four `hopa_admin`-owned `SECURITY DEFINER` functions |
+| `V2__accounts.sql` | accounts, household_key_wraps, admins, admin_sessions, pending_pairings; `members.account_id` |
 | `V3__pending_wrap.sql` | `pending_pairings.wrapped_key` |
 | `V4__voucher_key.sql` | `pending_pairings.voucher_device_id` |
-| `V5__admin_account_id.sql` | `account_id` on `admin_resolve_member` / `admin_resolve_household` |
+| `V5__task_needs_approval.sql` | the `needs_approval` task state |
 
-### `hopa_admin` provisioning (required before the first V2 migration)
+The four `hopa_admin`-owned `SECURITY DEFINER` lookup functions live in a separate
+optional location, `db/admin/V5__admin_lookups.sql`, applied only when
+`HOPA_ADMIN_LOOKUPS=true` (see below).
 
-Admin lookups read tenant rows through four `SECURITY DEFINER` functions owned
-by `hopa_admin`, a non-login role with `BYPASSRLS`. `FORCE ROW LEVEL SECURITY`
-binds the table owner too, so these functions cannot be owned by the normal
-runtime role. The role must be provisioned once before the first V2 migration,
-and the migration must be run by a **superuser** (the Render database owner): a
-non-superuser deploy role cannot both hold the `hopa_admin` membership needed to
-alter the function owners and pass the end-of-migration residual guard. The
-exact SQL and the post-migration checks are in
+### Admin lookups (optional)
+
+Admin lookups read tenant rows through four `SECURITY DEFINER` functions owned by
+`hopa_admin`, a non-login role with `BYPASSRLS`. `FORCE ROW LEVEL SECURITY` binds
+the table owner too, so these functions cannot be owned by the normal runtime
+role. They are applied only when `HOPA_ADMIN_LOOKUPS=true`, through
+`applyAdminLookups()` and its own Flyway history — creating a `BYPASSRLS` role
+needs a **superuser** (the Render database owner). On a managed Postgres without
+a superuser, set `HOPA_ADMIN_LOOKUPS=false` and the admin routes answer 503
+`E_UNSUPPORTED`. The exact SQL and the post-migration checks are in
 [`services/docs/guides/backend-deploy.md`](../docs/guides/backend-deploy.md).
 
 ## Environment variables
@@ -84,6 +88,7 @@ exact SQL and the post-migration checks are in
 | `HOPA_ADMIN_EMAIL` | — | Bootstrap admin email; seeds `admins` at boot (no-op unless both it and the password are set) |
 | `HOPA_ADMIN_PASSWORD` | — | Bootstrap admin password; seeds `admins` at boot (hashed, never logged) |
 | `HOPA_SMS_ENABLED` | `false` | Enables the SMS OTP routes; when false they answer `E_UNSUPPORTED` |
+| `HOPA_ADMIN_LOOKUPS` | `true` | Applies the optional `db/admin` lookup functions on boot; set `false` on a database that cannot create the `BYPASSRLS` owner (admin routes then answer `E_UNSUPPORTED`) |
 
 ## Module map
 

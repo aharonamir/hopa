@@ -7,7 +7,6 @@ import com.hopa.backend.http.respondError
 import com.hopa.backend.store.DeviceInventory
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -142,23 +141,4 @@ fun Application.adminRoutes(config: ServerConfig) {
             }
         }
     }
-}
-
-/**
- * The admin lookup functions are optional: they need a superuser-provisioned
- * BYPASSRLS role, which some managed Postgres providers do not allow. The
- * deployment says whether they were provisioned; without them the routes
- * answer a stable E_UNSUPPORTED instead of calling a missing function.
- *
- * The shared [adminIdentity] bearer check lives in `AdminAuth.kt` so the
- * session and lookup routes reuse it; this file keeps only the lookup gate.
- */
-private suspend fun ApplicationCall.adminLookupsAvailable(config: ServerConfig): Boolean {
-    if (config.adminLookups) return true
-    respondError(
-        HttpStatusCode.ServiceUnavailable,
-        "E_UNSUPPORTED",
-        "admin lookups are not provisioned on this database",
-    )
-    return false
 }

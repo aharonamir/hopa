@@ -78,10 +78,12 @@ Each line has a test in Task 3, Task 4, Task 5 or Task 7.
   `alter table tasks alter column from_device drop not null` (server-authored diag
   tasks); RLS enable+force + household policy on `household_key_wraps` and
   `pending_pairings`; **no** RLS on `accounts`/`admins`/`admin_sessions`; four
-  functions owned by the non-login `hopa_admin` (`BYPASSRLS`) role:
-  `admin_resolve_member(uuid)` and `admin_resolve_household(uuid)` return
-  `(household_id, member_id, display_name)`, `admin_resolve_phone(text)` returns
-  those plus `account_id`, and `admin_list_devices(uuid)` returns
+  functions owned by the non-login `hopa_admin` (`BYPASSRLS`) role, living in the
+  optional `db/admin/V5__admin_lookups.sql` migration (applied only when
+  `HOPA_ADMIN_LOOKUPS=true`): `admin_resolve_member(uuid)`,
+  `admin_resolve_household(uuid)` and `admin_resolve_phone(text)` each return
+  `(household_id, member_id, display_name, account_id)`, and
+  `admin_list_devices(uuid)` returns
   `(device_id, platform, name, last_seen_at, revoked_at)`. All are
   `SECURITY DEFINER`, `search_path = public, pg_temp`, and return minimum columns.
 

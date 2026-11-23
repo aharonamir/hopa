@@ -23,6 +23,7 @@ fun Application.lookupRoutes(config: ServerConfig) {
     routing {
         get("/v1/admin/households") {
             val admin = call.adminIdentity(config) ?: return@get
+            if (!call.adminLookupsAvailable(config)) return@get
             val query = call.request.queryParameters["query"]
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }

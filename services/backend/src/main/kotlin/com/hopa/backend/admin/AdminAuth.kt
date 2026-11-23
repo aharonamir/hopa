@@ -70,3 +70,22 @@ internal suspend fun ApplicationCall.adminIdentity(config: ServerConfig): AdminI
     }
     return identity
 }
+
+/**
+ * The admin lookup functions are optional: they need a superuser-provisioned
+ * BYPASSRLS role, which some managed Postgres providers do not allow. The
+ * deployment says whether they were provisioned; without them the admin routes
+ * that read tenant rows through a definer function answer a stable
+ * `E_UNSUPPORTED` instead of calling a missing function. The sign-in route
+ * (`POST /v1/admin/session`) only touches the global `admins`/`admin_sessions`
+ * tables and is deliberately not gated here.
+ */
+internal suspend fun ApplicationCall.adminLookupsAvailable(config: ServerConfig): Boolean {
+    if (config.adminLookups) return true
+    respondError(
+        HttpStatusCode.ServiceUnavailable,
+        "E_UNSUPPORTED",
+        "admin lookups are not provisioned on this database",
+    )
+    return false
+}

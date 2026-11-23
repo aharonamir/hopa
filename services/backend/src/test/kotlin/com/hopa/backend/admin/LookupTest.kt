@@ -58,7 +58,7 @@ class LookupTest {
         events.clear()
     }
 
-    private fun config() = ServerConfig(
+    private fun config(adminLookups: Boolean = true) = ServerConfig(
         version = "0.1.0",
         auth = PgAuth(db),
         devices = PgDevices(db),
@@ -66,6 +66,7 @@ class LookupTest {
         tasks = PgTaskStore(db),
         log = log,
         adminAuth = AdminAuth(db),
+        adminLookups = adminLookups,
         adminSessions = AdminSessions(db),
         householdLookup = HouseholdLookup(db, log),
     )
@@ -461,5 +462,17 @@ class LookupTest {
                 Json.parseToJsonElement(response.bodyAsText())
                     .jsonArray.single().jsonObject["memberId"]!!.jsonPrimitive.content,
             )
+        }
+
+    @Test
+    fun `the lookup reports unsupported when the database cannot provision the admin lookups`() =
+        testApplication {
+            val admin = seedAdminSession()
+            application { module(config(adminLookups = false)) }
+
+            val response = client.lookup(admin.token, "00000000-0000-0000-0000-000000000000")
+
+            assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+            assertEquals("E_UNSUPPORTED", code(response.bodyAsText()))
         }
 }
