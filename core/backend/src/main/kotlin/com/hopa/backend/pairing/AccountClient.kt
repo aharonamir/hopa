@@ -127,32 +127,31 @@ class AccountClient(
         return account
     }
 
-    private suspend fun post(path: String, body: String, secrets: List<String>): JsonObject =
-        withContext(dispatcher) {
-            val request = Request.Builder()
-                .url(base + path)
-                .post(body.toRequestBody(JSON))
-                .build()
-            val client = http.newBuilder().callTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
-            val response = try {
-                client.newCall(request).execute()
-            } catch (error: IOException) {
-                throw BackendPairingFailure.Unavailable(
-                    scrub("backend unreachable: ${error.message.orEmpty()}", secrets),
-                )
-            }
-            response.use {
-                val text = it.body?.string().orEmpty()
-                if (!it.isSuccessful) {
-                    val message = scrub(refusal(it.code, text), secrets)
-                    throw when {
-                        it.code in 400..499 -> BackendPairingFailure.Refused(it.code, message)
-                        else -> BackendPairingFailure.Unavailable(message)
-                    }
-                }
-                parse(text)
-            }
+    private suspend fun post(path: String, body: String, secrets: List<String>): JsonObject = withContext(dispatcher) {
+        val request = Request.Builder()
+            .url(base + path)
+            .post(body.toRequestBody(JSON))
+            .build()
+        val client = http.newBuilder().callTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
+        val response = try {
+            client.newCall(request).execute()
+        } catch (error: IOException) {
+            throw BackendPairingFailure.Unavailable(
+                scrub("backend unreachable: ${error.message.orEmpty()}", secrets),
+            )
         }
+        response.use {
+            val text = it.body?.string().orEmpty()
+            if (!it.isSuccessful) {
+                val message = scrub(refusal(it.code, text), secrets)
+                throw when {
+                    it.code in 400..499 -> BackendPairingFailure.Refused(it.code, message)
+                    else -> BackendPairingFailure.Unavailable(message)
+                }
+            }
+            parse(text)
+        }
+    }
 
     private fun refusal(status: Int, text: String): String {
         val error = runCatching { HopaJson.element.parseToJsonElement(text).jsonObject }.getOrNull()
