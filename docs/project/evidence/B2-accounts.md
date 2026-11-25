@@ -303,6 +303,36 @@ dropped off USB before the new APK could be installed, so `BackendSessionTest`
 is the only evidence for it; the console erase above is proven against the live
 backend, the live Postgres and the real console.
 
+### Console device inventory and the reveal — 2026-11-25 evening
+
+`/console/phones` (commit `88abe3ad`) lists every device across households
+through `admin_list_all_devices()`, a SECURITY DEFINER function owned by the
+`hopa_admin` BYPASSRLS role (migration V6, applied on boot: `Migrating schema
+"public" to version "6 - admin device list"`).
+
+| Step | Result | Evidence |
+|---|---|---|
+| The page renders the whole inventory | **10 devices** (7 android, 3 windows) | `GET /console/phones` → "0 of 10 online" at the time, one row per device with name, platform, status, last seen, household link and `…last4`. |
+| Default view masks the number | **Masked** | Rows read `…4567`, `…5165`, `…0077`; no full number in the page. |
+| Reveal one row | **One full number, one row** | `?reveal=b1bc01e8-…` → exactly one cell `+972545595165`; the other rows stay masked. |
+| Reveal is audited | **Hashed line** | `{"event":"admin.pii.reveal","at":"2026-11-25T15:14:44.453Z","admin_id":"fe306190-…","query_kind":"device","query_hash":"9518a38e9c502540"}` — no phone. |
+| A device that never connected | **Listed, `—` last seen** | Two android rows show `—` in Last seen and still carry the masked phone. |
+
+Tests: `ConsoleTest` 19/19, including "the devices page lists phones and PCs
+across households" and "the devices page masks the phone until one row is
+revealed"; RED shown by reverting only the route (both failed with 404).
+
+### The immediate-connect fix, corrected
+
+The first implementation (a call from `SignInRoute`) did not open the socket on
+the real phone: after a sign-up the device row existed but `last_seen_at`
+stayed empty until the app was backgrounded and refronted. Commit `8e57dfda`
+replaced it with an observer in `BackendSession`: when the stored device id
+changes while the app is in front, the session disconnects and reconnects.
+`storing an identity while in front opens the socket` failed with a 2 s timeout
+before that change and passes now; `rewriting the same identity does not churn
+the socket` covers the refresh path. `BackendSessionTest` 11/11.
+
 ## Pre-demo
 
 - [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
