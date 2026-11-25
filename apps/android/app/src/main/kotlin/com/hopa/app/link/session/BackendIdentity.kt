@@ -96,6 +96,11 @@ internal class BackendIdentity(
     }
 
     private suspend fun persist(credentials: BackendCredentials, privateKey: String) {
+        // Tokens first: the identity write wakes the session, so it must land
+        // with a complete credential.
+        settings.setBackendAccessToken(credentials.accessToken)
+        settings.setBackendRefreshToken(credentials.refreshToken)
+        settings.setBackendPrivateKey(privateKey)
         settings.update {
             it.copy(
                 backendUrl = credentials.gatewayUrl,
@@ -103,8 +108,5 @@ internal class BackendIdentity(
                 backendHouseholdId = credentials.householdId,
             )
         }
-        settings.setBackendAccessToken(credentials.accessToken)
-        settings.setBackendRefreshToken(credentials.refreshToken)
-        settings.setBackendPrivateKey(privateKey)
     }
 }

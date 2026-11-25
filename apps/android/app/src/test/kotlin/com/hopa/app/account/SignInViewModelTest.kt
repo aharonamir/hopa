@@ -82,6 +82,10 @@ class SignInViewModelTest {
             assertEquals("d1", settings.current().backendDeviceId)
             assertEquals("h1", settings.current().backendHouseholdId)
             assertEquals("+972501234567", settings.current().backendPhone)
+            assertFalse(
+                settings.identityLandedBeforeTokens,
+                "the tokens must be stored before the identity wakes the session",
+            )
             assertEquals(
                 BackendUrls.gatewayUrl(server.url("/").toString()),
                 settings.current().backendUrl,
@@ -196,8 +200,15 @@ class SignInViewModelTest {
         private var privateKey = ""
         private var contentKey = ""
 
+        /** True if the identity landed while a token it needs was still blank. */
+        var identityLandedBeforeTokens = false
+
         override suspend fun update(transform: (AppSettings) -> AppSettings) {
-            flow.value = transform(flow.value)
+            val next = transform(flow.value)
+            if (next.backendDeviceId.isNotBlank() && (access.isBlank() || refresh.isBlank())) {
+                identityLandedBeforeTokens = true
+            }
+            flow.value = next
         }
 
         override suspend fun modelKey(): String = ""

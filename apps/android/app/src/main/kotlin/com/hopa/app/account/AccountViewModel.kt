@@ -107,6 +107,11 @@ class AccountViewModel(
     }
 
     private suspend fun persist(account: SignedInAccount, privateKey: String, phone: String) {
+        // Tokens first: the identity write wakes the session (it watches the
+        // stored device id), so it must land with a complete credential.
+        settings.setBackendAccessToken(account.accessToken)
+        settings.setBackendRefreshToken(account.refreshToken)
+        settings.setBackendPrivateKey(privateKey)
         settings.update {
             it.copy(
                 // The link opens a socket; store `/v1/gateway`, not the HTTP origin.
@@ -117,9 +122,6 @@ class AccountViewModel(
                 backendPhone = phone,
             )
         }
-        settings.setBackendAccessToken(account.accessToken)
-        settings.setBackendRefreshToken(account.refreshToken)
-        settings.setBackendPrivateKey(privateKey)
     }
 
     private companion object {
