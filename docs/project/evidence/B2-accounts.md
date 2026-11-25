@@ -154,6 +154,43 @@ python tools/scripts/plan-status.py --plan docs/project/plan/backend
 - This file is indexed from [`docs/README.md`](../../README.md); the week-2 plan
   checklist entry is [`../plan/backend/week2.md`](../plan/backend/week2.md) W2.8.
 
+## Local end-to-end run — 2026-11-25
+
+Staging-style run on one Windows host: Postgres 16 in Docker on `127.0.0.1:55432`,
+the backend from `services/backend` `installDist`, a real Android phone
+(`2506BPN68G`, Android 17) over `adb reverse tcp:8080 tcp:8080`, and the Windows
+sidecar admitted by the phone. `HOPA_PUBLIC_SCHEME=ws` (LAN override, default
+stays `wss`), `HOPA_ADMIN_LOOKUPS=true`, admin seeded from env. No Render service
+was used and no secret is recorded here.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 3 | PC admitted by a phone QR; PC unwraps its key | **Admitted; unwrap and live gateway proven. Paste fallback used, camera auto-detect did not fire.** | Pending session `da478223-523c-469b-93e2-1b20f922492e`: vouched `10:25:23Z`, claimed `10:25:27Z`; PC device `301803a2-add0-4ba0-b778-d8fe4a8d370b`, household `f108f320-dc6e-425f-b043-cc50cc048549`; sidecar printed `admitted as 301803a2… to household f108f320…`, wrote `backend-session.json` at `12:25:27` local and emitted `{"type":"ready","version":1}`. Console listed the PC with `online: true`. The QR path itself rendered and the phone camera preview showed it; auto-detect did not fire and the paste path completed the vouch (gap carried). One encrypted task each way is **not** proven (sync v0 is out of this slice). |
+| 4 | Sign-up → sign-in round trip on the phone | **Proven on the real phone.** | Sign-up created household `f108f320…` and device `fcea6ab0-f34c-4fc2-ab7a-547efd5aee23`; sign-in on the same account created a second signed-in device `946fd66a-2c4f-49f0-b666-96b1098c8d24`. `GET /v1/admin/devices?household=…` returned both. |
+| 6 | Console lookup by phone / member-id / household-id | **Lookup by phone proven; PII line written.** | `GET /v1/admin/households?query=+972…4567` returned `householdId f108f320…`, `memberId c8cb6ca5…`, status `unverified`; the server wrote `{"event":"admin.pii.read","query_kind":"phone","query_hash":"6d7cdf3b1cac7978"}`. Member-id and household-id lookups were exercised by the automated `LookupTest` only. |
+| 7 | `diag.ping` from the console to a device | **Delivered to the live PC.** | `POST /v1/admin/devices/301803a2…/diag {type:"diag.ping"}` answered `202` with task `99ddaeb0-5638-4976-8a70-0beb9bf5dcbe`, trace `00-b2ef7aed98402bf19a62af48037f9a5b-abad6a15749d2e44-01`, state `delivered`; the task row became `diag.ping | done | from_device null`. Offline FCM wake and the phone-side ack are **not** proven here. |
+| 9 | No plaintext payload or phone number in the logs | **Local backend log clean.** | `Select-String -Path <backend log> -Pattern 'Bearer ', '\+[0-9]{8,15}'` → **0 matches**. The pair secret lives only in the sidecar's stderr/QR and was not written to the backend log. |
+
+Not proven by this run: #1 (sync v0 does not exist yet), #2 manual 5 s
+revocation timing, #3's encrypted task round-trip and camera auto-detect, #5
+(unit test only), #7's offline FCM wake and phone-side delivery.
+
+### Findings from the local run
+
+1. **Duplicate `PendingState` class.** `core/backend` and `services/backend` both
+   define `com.hopa.backend.pairing.PendingState`. The `installDist` wildcard
+   classpath loaded the client class first and `/v1/pair/pending/resolve` failed
+   with `NoSuchMethodError: PendingState.<init>(7 strings)` → HTTP 500. The run
+   was completed by launching with `lib/hopa-backend.jar` ahead of `lib/*`.
+   Proper fix: rename one class and add a runtime-boot smoke test.
+2. **Android stores the HTTP base as the gateway URL.** Sign-up and sign-in save
+   `backendUrl = http://host:port`, so `BackendSession` never opens
+   `ws(s)://host/v1/gateway`; the phone shows "failed: the gateway is
+   unreachable" and its 15-minute access token is never refreshed. A vouch after
+   the token TTL therefore returns `E_AUTH`. Fix in
+   `app/account/AccountViewModel.persist` (or derive it in
+   `BackendIdentity.stored`).
+
 ## Pre-demo
 
 - [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
