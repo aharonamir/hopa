@@ -7,6 +7,7 @@ import com.hopa.backend.accounts.Passwords
 import com.hopa.backend.accounts.SignUpRequest
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.admin.AccountRemoval
+import com.hopa.backend.admin.AdminDeviceList
 import com.hopa.backend.admin.AdminSessions
 import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.auth.DeviceIdentity
@@ -79,6 +80,7 @@ class ConsoleTest {
         adminSessions = AdminSessions(db),
         householdLookup = HouseholdLookup(db, log),
         accountRemoval = AccountRemoval(db, PgDevices(db), registry::kick, log),
+        deviceList = AdminDeviceList(db),
         traces = traceStore,
         traceQuery = traceStore,
     )
@@ -339,6 +341,44 @@ class ConsoleTest {
         assertTrue(html.contains(fixture.householdId), html)
         assertTrue(html.contains("…4567"), html)
         assertFalse(html.contains(phone), "the full phone must not appear")
+        assertTrue(html.contains("Reveal number"), "the page must offer the reveal")
+    }
+
+    @Test
+    fun `revealing the number shows it and writes its own access line`() = testApplication {
+        val phone = uniquePhone()
+        val fixture = seedAccountHousehold(phone = phone)
+        val admin = seedAdminSession()
+        application { module(config()) }
+        client.console(admin.token, "/console/lookup?query=${fixture.householdId}")
+        val afterMasked = events.count { it.first == "admin.pii.read" }
+
+        val revealed = client.console(
+            admin.token,
+            "/console/lookup?query=${fixture.householdId}&reveal=1",
+        )
+
+        assertEquals(HttpStatusCode.OK, revealed.status)
+        val html = revealed.bodyAsText()
+        assertTrue(html.contains(phone), "the revealed page must carry the full number")
+        assertEquals(afterMasked + 1, events.count { it.first == "admin.pii.read" })
+        assertTrue(events.none { it.second.containsValue(phone) }, "no access line carries the phone")
+    }
+
+    @Test
+    fun `a reveal link is built from the household id, not the phone`() = testApplication {
+        val phone = uniquePhone()
+        val fixture = seedAccountHousehold(phone = phone)
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val html = client.console(
+            admin.token,
+            "/console/lookup?query=${fixture.householdId}",
+        ).bodyAsText()
+
+        assertTrue(html.contains("reveal=1"), html)
+        assertFalse(html.contains(phone), "a link must never carry the phone")
     }
 
     @Test
@@ -624,6 +664,45 @@ class ConsoleTest {
     }
 
     /** A fresh 32-byte key as standard base64, which the account routes accept. */
+    @Test
+    fun `the devices page lists phones and PCs across households`() = testApplication {
+        val first = seedAccountHousehold(phone = uniquePhone())
+        val second = seedAccountHousehold(phone = uniquePhone())
+        addDevice(second.householdId, second.memberId, "windows", "Desk")
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.console(admin.token, "/console/phones")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val html = response.bodyAsText()
+        assertTrue(html.contains("Pixel"), html)
+        assertTrue(html.contains("Desk"), html)
+        assertTrue(html.contains(first.householdId), html)
+        assertTrue(html.contains(second.householdId), html)
+    }
+
+    @Test
+    fun `the devices page masks the phone until one row is revealed`() = testApplication {
+        val phone = uniquePhone()
+        val fixture = seedAccountHousehold(phone = phone)
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val masked = client.console(admin.token, "/console/phones").bodyAsText()
+        assertTrue(masked.contains("…4567"), masked)
+        assertFalse(masked.contains(phone), "the full phone must not appear")
+
+        val revealed = client.console(
+            admin.token,
+            "/console/phones?reveal=${fixture.deviceId}",
+        ).bodyAsText()
+        assertTrue(revealed.contains(phone), "the revealed row must carry the number")
+        val audit = events.single { it.first == "admin.pii.reveal" }
+        assertEquals(admin.id, audit.second["admin_id"])
+        assertFalse(audit.second.containsValue(phone), "the reveal line must not carry the phone")
+    }
+
     private fun base64Key(): String {
         val bytes = ByteArray(32)
         random.nextBytes(bytes)

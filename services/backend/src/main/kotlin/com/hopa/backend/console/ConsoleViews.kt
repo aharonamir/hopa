@@ -19,6 +19,7 @@ import kotlinx.html.table
 import kotlinx.html.tbody
 import kotlinx.html.td
 import kotlinx.html.th
+import kotlinx.html.thead
 import kotlinx.html.title
 import kotlinx.html.tr
 import kotlinx.html.ul
@@ -45,6 +46,22 @@ data class ConsoleLookupRow(
     val accountStatus: String,
     val queueDepth: Int?,
     val devices: List<ConsoleDevice>,
+    /** The full number, set only for an explicit reveal request. */
+    val fullPhone: String? = null,
+)
+
+/** One row of the all-devices page. */
+data class ConsolePhoneRow(
+    val deviceId: String,
+    val householdId: String,
+    val platform: String,
+    val name: String,
+    val online: Boolean,
+    val lastSeenAt: String?,
+    val revoked: Boolean,
+    val maskedPhone: String?,
+    /** The full number, set only for the row named in a reveal request. */
+    val fullPhone: String? = null,
 )
 
 /**
@@ -78,6 +95,7 @@ object ConsoleViews {
         p { +"Version: $version" }
         p { +"Database: $db" }
         p { +"Queue depth: select a household" }
+        p { a(href = "/console/phones") { +"All devices" } }
         renderLookupForm()
     }
 
@@ -177,10 +195,15 @@ object ConsoleViews {
                 tr { th { +"Household id" }; td { +row.householdId } }
                 tr { th { +"Member id" }; td { +row.memberId } }
                 tr { th { +"Display name" }; td { +row.displayName } }
-                tr { th { +"Phone" }; td { +(row.maskedPhone ?: "—") } }
+                tr { th { +"Phone" }; td { +(row.fullPhone ?: row.maskedPhone ?: "—") } }
                 tr { th { +"Verified" }; td { +row.verified.toString() } }
                 tr { th { +"Status" }; td { +row.accountStatus } }
                 tr { th { +"Queue depth" }; td { +(row.queueDepth?.toString() ?: "—") } }
+            }
+        }
+        if (row.fullPhone == null && row.maskedPhone != null) {
+            p {
+                a(href = "/console/lookup?query=${row.householdId}&reveal=1") { +"Reveal number" }
             }
         }
         h3 { +"Devices" }
@@ -222,6 +245,59 @@ object ConsoleViews {
         page("Hopa console - account removed") {
             h1 { +"Account removed" }
             p { +"Household $householdId and its $devices device(s) are gone." }
+            p { a(href = "/console") { +"Back to the console" } }
+        }
+
+    /** Every device across households, with the phone masked unless revealed. */
+    fun phones(rows: List<ConsolePhoneRow>): HTML.() -> Unit =
+        page("Hopa console - devices") {
+            h1 { +"All devices" }
+            p { +"${rows.count { it.online }} of ${rows.size} online" }
+            if (rows.isEmpty()) {
+                p { +"No devices." }
+            } else {
+                table {
+                    thead {
+                        tr {
+                            th { +"Name" }
+                            th { +"Platform" }
+                            th { +"Status" }
+                            th { +"Last seen" }
+                            th { +"Household" }
+                            th { +"Phone" }
+                        }
+                    }
+                    tbody {
+                        rows.forEach { row ->
+                            tr {
+                                td { +row.name }
+                                td { +row.platform }
+                                td {
+                                    +when {
+                                        row.revoked -> "revoked"
+                                        row.online -> "online"
+                                        else -> "offline"
+                                    }
+                                }
+                                td { +(row.lastSeenAt ?: "—") }
+                                td {
+                                    a(href = "/console/lookup?query=${row.householdId}") {
+                                        +row.householdId
+                                    }
+                                }
+                                td {
+                                    val shown = row.fullPhone ?: row.maskedPhone
+                                    +(shown ?: "—")
+                                    if (row.fullPhone == null && row.maskedPhone != null) {
+                                        +" "
+                                        a(href = "/console/phones?reveal=${row.deviceId}") { +"reveal" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             p { a(href = "/console") { +"Back to the console" } }
         }
 }

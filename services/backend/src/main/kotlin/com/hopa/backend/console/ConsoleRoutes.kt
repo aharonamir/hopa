@@ -10,6 +10,7 @@ import com.hopa.backend.admin.UUID_PATTERN
 import com.hopa.backend.http.BodyTooLarge
 import com.hopa.backend.http.receiveBoundedParameters
 import com.hopa.backend.http.respondError
+import com.hopa.backend.pairing.Tokens
 import com.hopa.backend.pairing.remoteAddress
 import com.hopa.backend.store.DeviceInventory
 import io.ktor.http.Cookie
@@ -106,6 +107,7 @@ fun Application.consoleRoutes(config: ServerConfig) {
                 return@get
             }
             val query = call.request.queryParameters["query"]?.trim().orEmpty()
+            val reveal = call.request.queryParameters["reveal"] == "1"
             if (query.isEmpty()) {
                 call.respondHtml(
                     HttpStatusCode.OK,
@@ -130,9 +132,59 @@ fun Application.consoleRoutes(config: ServerConfig) {
                     accountStatus = row.accountStatus,
                     queueDepth = config.db.queueDepth(row.householdId),
                     devices = config.devicesFor(row.householdId),
+                    // The full number only on an explicit request, and only into
+                    // the response: it still never reaches the access log.
+                    fullPhone = if (reveal) row.phone else null,
                 )
             }
             call.respondHtml(HttpStatusCode.OK, ConsoleViews.lookupResults(query, rows))
+        }
+
+        get("/console/phones") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@get
+            val list = config.deviceList
+            if (list == null) {
+                call.respondHtml(
+                    HttpStatusCode.ServiceUnavailable,
+                    ConsoleViews.error(503, "device inventory is not configured"),
+                )
+                return@get
+            }
+            val reveal = call.request.queryParameters["reveal"]
+            val rows = list.list()
+            if (reveal != null) {
+                val phone = rows.firstOrNull { it.deviceId == reveal }?.phone
+                if (phone != null) {
+                    // The reveal is the deliberate PII read; the list itself only
+                    // ever renders the masked tail.
+                    config.log.event(
+                        "admin.pii.reveal",
+                        mapOf(
+                            "admin_id" to admin.adminId,
+                            "query_kind" to "device",
+                            "query_hash" to Tokens.hex(Tokens.hash(phone)).take(16),
+                        ),
+                    )
+                }
+            }
+            call.respondHtml(
+                HttpStatusCode.OK,
+                ConsoleViews.phones(
+                    rows.map { row ->
+                        ConsolePhoneRow(
+                            deviceId = row.deviceId,
+                            householdId = row.householdId,
+                            platform = row.platform,
+                            name = row.name,
+                            online = config.registry.online(row.deviceId),
+                            lastSeenAt = row.lastSeenAt,
+                            revoked = row.revoked,
+                            maskedPhone = row.phone?.let { "…" + it.takeLast(4) },
+                            fullPhone = if (reveal == row.deviceId) row.phone else null,
+                        )
+                    },
+                ),
+            )
         }
 
         get("/console/device/{id}") {

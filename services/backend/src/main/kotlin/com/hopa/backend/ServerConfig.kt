@@ -5,6 +5,7 @@ import com.hopa.backend.accounts.OtpService
 import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.admin.AccountRemoval
 import com.hopa.backend.admin.AdminAuth
+import com.hopa.backend.admin.AdminDeviceList
 import com.hopa.backend.admin.AdminSessions
 import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.auth.AuthPort
@@ -40,6 +41,8 @@ data class ServerConfig(
     val householdLookup: HouseholdLookup? = null,
     /** The admin account eraser; absent without a database. */
     val accountRemoval: AccountRemoval? = null,
+    /** Every device across households, for the console inventory; absent without a database. */
+    val deviceList: AdminDeviceList? = null,
     val devices: DeviceDirectory = DeviceDirectory.Empty,
     /** The one in-memory presence registry shared by the gateway and device routes. */
     val registry: DeviceRegistry = DeviceRegistry(),

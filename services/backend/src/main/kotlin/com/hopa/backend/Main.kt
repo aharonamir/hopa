@@ -9,6 +9,7 @@ import com.hopa.backend.accounts.accountRoutes
 import com.hopa.backend.accounts.otpRoutes
 import com.hopa.backend.admin.AccountRemoval
 import com.hopa.backend.admin.AdminAuth
+import com.hopa.backend.admin.AdminDeviceList
 import com.hopa.backend.admin.AdminSessions
 import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.admin.adminRoutes
@@ -159,6 +160,7 @@ fun main() {
         } else {
             null
         },
+        deviceList = database?.let(::AdminDeviceList),
         devices = devices,
         registry = registry,
         db = database?.let(::PostgresProbe) ?: DbProbe.Unconfigured,
