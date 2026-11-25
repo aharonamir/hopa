@@ -209,7 +209,7 @@ object ConsoleViews {
                 input(type = InputType.hidden, name = "household") { value = row.householdId }
                 input(type = InputType.hidden, name = "member") { value = row.memberId }
                 p {
-                    label { +"Type $masked to confirm" }
+                    label { +"Type the last four digits ($masked) to confirm" }
                     input(type = InputType.text, name = "confirm")
                 }
                 p { input(type = InputType.submit) { value = "Remove account" } }

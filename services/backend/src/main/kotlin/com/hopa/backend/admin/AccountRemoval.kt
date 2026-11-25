@@ -3,6 +3,7 @@ package com.hopa.backend.admin
 import com.hopa.backend.log.EventLog
 import com.hopa.backend.store.Database
 import com.hopa.backend.store.DeviceInventory
+import java.sql.SQLException
 
 /**
  * The console's account eraser. One account owns one household today, so a
@@ -55,24 +56,45 @@ class AccountRemoval(
         }
 
         // Cut the tokens and the key wrap per device first, then the socket, so
-        // nothing is left that could answer a delivery during the delete.
+        // nothing is left that could answer a delivery during the delete. A
+        // revoke that lands before a failed erase only makes the cut earlier,
+        // which is the safe direction.
         deviceIds.forEach { deviceId ->
             inventory.revokeDevice(deviceId, householdId)
             kick(deviceId)
         }
 
-        db.tenant(householdId) { connection ->
-            connection.prepareStatement("delete from households where id = ?::uuid").use {
-                it.setString(1, householdId)
-                it.executeUpdate()
+        // Both deletes share one transaction: a household removed without its
+        // account would leave a row that `phoneExists` counts forever, and the
+        // console could not retry because the lookup key (the household) is
+        // already gone. The account row has no policy, so it deletes from
+        // inside the tenant transaction like any tenant row.
+        val removed = try {
+            db.tenant(householdId) { connection ->
+                val households = connection
+                    .prepareStatement("delete from households where id = ?::uuid")
+                    .use { statement ->
+                        statement.setString(1, householdId)
+                        statement.executeUpdate()
+                    }
+                if (households == 0) {
+                    return@tenant false
+                }
+                val accounts = connection
+                    .prepareStatement("delete from accounts where id = ?::uuid")
+                    .use { statement ->
+                        statement.setString(1, accountId)
+                        statement.executeUpdate()
+                    }
+                accounts > 0
             }
+        } catch (problem: SQLException) {
+            // The account still backs another household's member row (the FK has
+            // no cascade). Nothing was deleted: the household delete rolled back.
+            return Outcome.Refused("E_CONFLICT", "the account is still used by another household")
         }
-
-        db.read { connection ->
-            connection.prepareStatement("delete from accounts where id = ?::uuid").use {
-                it.setString(1, accountId)
-                it.executeUpdate()
-            }
+        if (!removed) {
+            return Outcome.Refused("E_NOT_FOUND", "the household or account was already gone")
         }
 
         log.event(

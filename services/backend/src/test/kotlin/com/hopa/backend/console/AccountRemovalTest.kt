@@ -157,6 +157,37 @@ class AccountRemovalTest {
     }
 
     @Test
+    fun `an account still used by another household is not half-erased`() {
+        val fixture = seedAccountHousehold()
+        // A second household whose member points at the same account: the FK on
+        // members.account_id has no cascade, so deleting the account must fail.
+        val otherHousehold = newHousehold()
+        db.tenant(otherHousehold) { connection ->
+            connection.prepareStatement("insert into households(id, name) values (?::uuid, 'Other')").use {
+                it.setString(1, otherHousehold)
+                it.executeUpdate()
+            }
+            connection.prepareStatement(
+                "insert into members(id, household_id, role, display_name, account_id) " +
+                    "values (?::uuid, ?::uuid, 'member', 'Bob', ?::uuid)",
+            ).use {
+                it.setString(1, UUID.randomUUID().toString())
+                it.setString(2, otherHousehold)
+                it.setString(3, fixture.accountId)
+                it.executeUpdate()
+            }
+        }
+
+        val outcome = removal.remove(adminId, fixture.householdId, fixture.memberId)
+
+        assertTrue(outcome is AccountRemoval.Outcome.Refused, outcome.toString())
+        assertTrue(householdExists(fixture.householdId), "the household must survive a failed erase")
+        assertTrue(deviceExists(fixture.householdId, fixture.deviceId))
+        assertTrue(accountExists(fixture.accountId))
+        assertTrue(events.none { it.first == "admin.account.remove" })
+    }
+
+    @Test
     fun `removal tells the device's live socket to close`() {
         val fixture = seedAccountHousehold()
         val session = DeviceRegistry.Session(

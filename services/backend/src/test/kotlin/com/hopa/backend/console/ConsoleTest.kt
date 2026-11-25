@@ -535,6 +535,23 @@ class ConsoleTest {
     }
 
     @Test
+    fun `the tail may be typed with the leading ellipsis the page shows`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.removeAccount(
+            admin.token,
+            fixture.householdId,
+            fixture.memberId,
+            confirm = "…${fixture.phone.takeLast(4)}",
+        )
+
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        assertFalse(householdExists(fixture.householdId))
+    }
+
+    @Test
     fun `a wrong tail deletes nothing`() = testApplication {
         val fixture = seedAccountHousehold()
         val admin = seedAdminSession()

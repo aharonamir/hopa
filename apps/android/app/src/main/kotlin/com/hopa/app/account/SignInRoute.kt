@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hopa.app.di.AppContainer
 import com.hopa.app.link.push.FirebaseToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The sign-in / sign-up screen. Phone + password, one busy flag and one error,
@@ -33,8 +35,13 @@ fun SignInRoute(
         if (state.signedIn) {
             // The gateway session waits for the next launch otherwise, so a fresh
             // account shows up offline in the console until the app restarts.
-            container.backend.identityChanged()
-            onSignedIn()
+            // The navigation does not depend on the socket: a link that fails to
+            // open must never strand a signed-in person on this screen.
+            try {
+                withContext(Dispatchers.IO) { container.backend.identityChanged() }
+            } finally {
+                onSignedIn()
+            }
         }
     }
     SignInScreen(

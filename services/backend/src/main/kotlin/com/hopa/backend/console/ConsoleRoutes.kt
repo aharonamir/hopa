@@ -265,14 +265,17 @@ fun Application.consoleRoutes(config: ServerConfig) {
                 return@post
             }
             val tail = row.phone?.takeLast(4)
-            if (tail == null || params["confirm"]?.trim() != tail) {
+            // The page shows "…4998"; accept either the four digits or the
+            // exact text it asked for, so following the label always works.
+            val typed = params["confirm"]?.trim()?.removePrefix("…")
+            if (tail == null || typed != tail) {
                 call.respondHtml(
                     HttpStatusCode.BadRequest,
                     ConsoleViews.error(400, "type the last four digits shown to confirm"),
                 )
                 return@post
             }
-            when (val outcome = removal.remove(admin.adminId, household, member)) {
+            when (val outcome = removal.remove(admin.adminId, row.householdId, row.memberId)) {
                 is AccountRemoval.Outcome.Removed -> call.respondHtml(
                     HttpStatusCode.OK,
                     ConsoleViews.removed(outcome.householdId, outcome.devices),
