@@ -10,6 +10,7 @@ import com.hopa.backend.pairing.BackendPairing
 import com.hopa.backend.pairing.PairingLink
 import com.hopa.backend.wire.BackendEnvelope
 import java.util.Base64
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +27,7 @@ import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import com.hopa.app.link.push.FirebaseToken
@@ -310,6 +312,69 @@ class BackendSessionTest {
             assertEquals("a1", refreshed.accessToken)
         } finally {
             server.shutdown()
+        }
+    }
+
+    @Test
+    fun `identityChanged opens the socket as soon as a sign-in stores the identity`() = runBlocking {
+        val settings = FakeSettings()
+        val links = CopyOnWriteArrayList<FakeLink>()
+        val builds = AtomicInteger()
+        val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
+            builds.incrementAndGet()
+            FakeLink(credentials, pushToken, refresh).also { links += it }
+        })
+
+        try {
+            // The app was already in front when the sign-in screen was showing.
+            session.onForeground()
+            delay(100)
+            assertEquals(0, builds.get())
+
+            settings.seed(
+                url = "ws://x/v1/gateway",
+                device = "d1",
+                household = "h1",
+                accessToken = "a1",
+                refreshToken = "r1",
+                privateKey = "key",
+            )
+            session.identityChanged()
+
+            withTimeout(2_000) {
+                while (links.isEmpty()) delay(10)
+            }
+            assertEquals(1, builds.get())
+            assertTrue(links.first().started)
+        } finally {
+            session.disconnect()
+        }
+    }
+
+    @Test
+    fun `a second identityChanged keeps one live link`() = runBlocking {
+        val settings = FakeSettings().paired("ws://x/v1/gateway")
+        val links = CopyOnWriteArrayList<FakeLink>()
+        val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
+            FakeLink(credentials, pushToken, refresh).also { links += it }
+        })
+
+        try {
+            session.onForeground()
+            withTimeout(2_000) {
+                while (links.isEmpty()) delay(10)
+            }
+            session.identityChanged()
+            withTimeout(2_000) {
+                while (links.size < 2) delay(10)
+            }
+
+            assertEquals(2, links.size)
+            assertTrue(links.first().stopped)
+            assertFalse(links.last().stopped)
+            assertSame(links.last(), session.currentLink())
+        } finally {
+            session.disconnect()
         }
     }
 

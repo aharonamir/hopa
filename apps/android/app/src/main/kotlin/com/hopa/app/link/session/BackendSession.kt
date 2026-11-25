@@ -126,6 +126,18 @@ class BackendSession(
         Result.failure(error)
     }
 
+    /**
+     * The stored identity just changed (a sign-up or sign-in wrote it while the
+     * app was already in front). Open it now instead of waiting for the next
+     * launch; [disconnect] first so two sockets never rotate one token family.
+     */
+    suspend fun identityChanged() {
+        disconnect()
+        if (foreground) {
+            connect()
+        }
+    }
+
     /** The activity is visible: keep presence open until [onBackground]. */
     fun onForeground() {
         foreground = true
