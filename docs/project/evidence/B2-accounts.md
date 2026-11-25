@@ -283,6 +283,26 @@ Two more findings:
    The app's main window also still shows `No bridge` after a gateway pairing,
    for the same reason as the phone pill: that label is the legacy bridge.
 
+### Console account erase and immediate connect — 2026-11-25 afternoon
+
+Two fixes from this run, on `backend-tests`: the gateway socket now opens as
+soon as sign-up/sign-in stores the identity (`e02c9aa4`, `eab87209`), and the
+console can erase an account (`117b0c94`, `d53c9852`).
+
+| Step | Result | Evidence |
+|---|---|---|
+| Wrong tail through the console form | **Refused** | `POST /console/account/remove` with `confirm=0000` → `400`, "type the last four digits shown to confirm"; the household stayed. |
+| Correct tail | **Erased** | Lookup of `+972501234998` → `Remove account` → "Account removed … Household `8e4b5b01-4a47-4ec2-95a2-a752d18cec5b` and its 3 device(s) are gone." |
+| Database after the erase | **Nothing left** | `households` 0, `accounts` 0, `devices` 0, and `accounts.phone = '+972501234998'` returned no row (no tombstone). |
+| Audit line | **Written, ids only** | `{"event":"admin.account.remove","at":"2026-11-25T14:22:17.143Z","admin_id":"fe306190-…","household_id":"8e4b5b01-…"}` — no phone, no tokens. |
+| The same number registers again | **201 Created** | `POST /v1/accounts` → account `0fe36d8d-cb08-4742-8516-3a058d0c1ee4`, household `46e57bd8-cdbb-4a3f-a848-53da5ae74b04`, device `e6ce92e5-…`; erased again from the console (1 device) so the number stays free. |
+| Tests | **Green** | `AccountRemovalTest` 4/4, `ConsoleTest` 16/16, `BackendSessionTest` 11/11 (including `identityChanged` and "a second identityChanged keeps one live link"). |
+
+Not yet proven live: the phone half of the immediate-connect fix. The phone
+dropped off USB before the new APK could be installed, so `BackendSessionTest`
+is the only evidence for it; the console erase above is proven against the live
+backend, the live Postgres and the real console.
+
 ## Pre-demo
 
 - [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
