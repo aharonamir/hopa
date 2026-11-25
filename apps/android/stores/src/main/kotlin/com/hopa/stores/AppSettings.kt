@@ -65,4 +65,6 @@ data class AppSettings(
     /** Identity this device was given when it joined the household. */
     val backendDeviceId: String = "",
     val backendHouseholdId: String = "",
+    /** The E.164 number this phone signed in with, shown on the Account page. */
+    val backendPhone: String = "",
 )

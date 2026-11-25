@@ -6,7 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.List
@@ -43,6 +48,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
 ) {
     val settings = state.settings
+    val clipboard = LocalClipboardManager.current
     var query by androidx.compose.runtime.saveable.rememberSaveable {
         androidx.compose.runtime.mutableStateOf("")
     }
@@ -103,6 +109,16 @@ fun SettingsScreen(
                 "Keys and models are set on How HOPA acts."
             },
         )
+
+        if (state.backendDeviceId.isNotBlank() || state.backendPhone.isNotBlank()) {
+            SettingsGroup {
+                AccountField("Phone", state.backendPhone, clipboard)
+                SettingsDivider()
+                AccountField("Household", state.backendHouseholdId, clipboard)
+                SettingsDivider()
+                AccountField("Device", state.backendDeviceId, clipboard)
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -168,6 +184,28 @@ fun SettingsScreen(
 
 const val PAGE_NOTIFICATIONS = "notifications"
 const val PAGE_PRIVACY = "privacy"
+
+/** One identity value with a tap-to-copy action. */
+@Composable
+private fun AccountField(title: String, value: String, clipboard: ClipboardManager) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 13.sp, color = HopaColor.TextSecondary)
+            Text(value.ifBlank { "—" }, fontSize = 13.sp, color = HopaColor.TextPrimary)
+        }
+        TextButton(
+            onClick = { clipboard.setText(AnnotatedString(value)) },
+            enabled = value.isNotBlank(),
+        ) {
+            Text("Copy")
+        }
+    }
+}
 
 /** One entry the search box can find: a title, its words, and where it goes. */
 private data class Searchable(

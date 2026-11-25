@@ -74,7 +74,7 @@ class AccountViewModel(
                     selfWrappedKey = selfWrappedKey,
                     pushToken = pushToken(),
                 )
-                persist(account, privateKey)
+                persist(account, privateKey, normalized)
                 settings.setBackendContentKey(Base64.getEncoder().encodeToString(contentKey))
             } else {
                 val account = accountClient(gatewayUrl).signIn(
@@ -85,7 +85,7 @@ class AccountViewModel(
                     publicKey = publicKey,
                     pushToken = pushToken(),
                 )
-                persist(account, privateKey)
+                persist(account, privateKey, normalized)
             }
             _state.update { it.copy(busy = false, signedIn = true) }
         } catch (cancelled: CancellationException) {
@@ -106,13 +106,15 @@ class AccountViewModel(
         }
     }
 
-    private suspend fun persist(account: SignedInAccount, privateKey: String) {
+    private suspend fun persist(account: SignedInAccount, privateKey: String, phone: String) {
         settings.update {
             it.copy(
                 // The link opens a socket; store `/v1/gateway`, not the HTTP origin.
                 backendUrl = BackendUrls.gatewayUrl(gatewayUrl),
                 backendDeviceId = account.deviceId,
                 backendHouseholdId = account.householdId,
+                // Shown on Settings → Account; never sent anywhere.
+                backendPhone = phone,
             )
         }
         settings.setBackendAccessToken(account.accessToken)

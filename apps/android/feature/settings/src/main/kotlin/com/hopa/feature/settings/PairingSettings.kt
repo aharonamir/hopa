@@ -20,6 +20,8 @@ internal class PairingSettings(
     suspend fun snapshot(settings: AppSettings): PairingSnapshot = PairingSnapshot(
         backendUrl = settings.backendUrl,
         backendDeviceId = settings.backendDeviceId,
+        backendHouseholdId = settings.backendHouseholdId,
+        backendPhone = settings.backendPhone,
         backendName = deps.backendName(),
         backendToken = deps.backendToken(),
         fcmAvailable = deps.fcmAvailable(),

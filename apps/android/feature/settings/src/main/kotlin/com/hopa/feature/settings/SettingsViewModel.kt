@@ -473,6 +473,8 @@ class SettingsViewModel @Inject constructor(
                 backgroundRunning = background,
                 backendUrl = pairing.backendUrl,
                 backendDeviceId = pairing.backendDeviceId,
+                backendHouseholdId = pairing.backendHouseholdId,
+                backendPhone = pairing.backendPhone,
                 backendName = pairing.backendName,
                 backendToken = pairing.backendToken,
                 fcmAvailable = pairing.fcmAvailable,

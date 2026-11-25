@@ -81,6 +81,7 @@ class SignInViewModelTest {
             assertEquals("rt1", settings.backendRefreshToken())
             assertEquals("d1", settings.current().backendDeviceId)
             assertEquals("h1", settings.current().backendHouseholdId)
+            assertEquals("+972501234567", settings.current().backendPhone)
             assertEquals(
                 BackendUrls.gatewayUrl(server.url("/").toString()),
                 settings.current().backendUrl,

@@ -28,6 +28,9 @@ data class SettingsUiState(
     /** The gateway this phone talks to, and the identity it paired as. */
     val backendUrl: String = "",
     val backendDeviceId: String = "",
+    val backendHouseholdId: String = "",
+    /** The number this phone signed in with, shown on the Account page. */
+    val backendPhone: String = "",
     val backendState: BackendState = BackendState.Disconnected,
     /** The FCM registration, never shown whole. */
     val backendToken: String? = null,
