@@ -1,8 +1,12 @@
 package com.hopa.backend.console
 
 import com.hopa.backend.ServerConfig
+import com.hopa.backend.accounts.AccountOutcome
+import com.hopa.backend.accounts.AccountService
 import com.hopa.backend.accounts.Passwords
+import com.hopa.backend.accounts.SignUpRequest
 import com.hopa.backend.admin.AdminAuth
+import com.hopa.backend.admin.AccountRemoval
 import com.hopa.backend.admin.AdminSessions
 import com.hopa.backend.admin.HouseholdLookup
 import com.hopa.backend.auth.DeviceIdentity
@@ -13,20 +17,26 @@ import com.hopa.backend.harness.newHousehold
 import com.hopa.backend.log.EventLog
 import com.hopa.backend.module
 import com.hopa.backend.pairing.PgAuth
+import com.hopa.backend.pairing.TokenIssuer
 import com.hopa.backend.pairing.Tokens
 import com.hopa.backend.store.PgDevices
 import com.hopa.backend.store.PgTaskStore
 import com.hopa.backend.store.PostgresProbe
 import com.hopa.backend.trace.PgTraceStore
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.forms.submitForm
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.sql.Timestamp
 import java.time.Instant
@@ -68,6 +78,7 @@ class ConsoleTest {
         adminAuth = AdminAuth(db),
         adminSessions = AdminSessions(db),
         householdLookup = HouseholdLookup(db, log),
+        accountRemoval = AccountRemoval(db, PgDevices(db), registry::kick, log),
         traces = traceStore,
         traceQuery = traceStore,
     )
@@ -497,5 +508,145 @@ class ConsoleTest {
         )
 
         assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+    }
+
+    @Test
+    fun `the console removes an account when the tail matches`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.removeAccount(
+            admin.token,
+            fixture.householdId,
+            fixture.memberId,
+            confirm = fixture.phone.takeLast(4),
+        )
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val html = response.bodyAsText()
+        assertTrue(html.contains("Account removed"), html)
+        assertFalse(householdExists(fixture.householdId), "the household must be gone")
+        assertFalse(accountExists(fixture.accountId), "the account row must be gone")
+        val audited = events.single { it.first == "admin.account.remove" }
+        assertEquals(admin.id, audited.second["admin_id"])
+        assertEquals(fixture.householdId, audited.second["household_id"])
+        assertFalse(audited.second.containsKey("phone"))
+    }
+
+    @Test
+    fun `a wrong tail deletes nothing`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.removeAccount(
+            admin.token,
+            fixture.householdId,
+            fixture.memberId,
+            confirm = "0000",
+        )
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(householdExists(fixture.householdId))
+        assertTrue(accountExists(fixture.accountId))
+        assertTrue(events.none { it.first == "admin.account.remove" })
+    }
+
+    @Test
+    fun `a cross-site removal is refused and deletes nothing`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val response = client.removeAccount(
+            admin.token,
+            fixture.householdId,
+            fixture.memberId,
+            confirm = fixture.phone.takeLast(4),
+        ) {
+            header("Origin", "https://evil.example")
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertTrue(householdExists(fixture.householdId))
+        assertTrue(accountExists(fixture.accountId))
+    }
+
+    @Test
+    fun `the erased phone can register again`() = testApplication {
+        val fixture = seedAccountHousehold()
+        val admin = seedAdminSession()
+        application { module(config()) }
+
+        val removed = client.removeAccount(
+            admin.token,
+            fixture.householdId,
+            fixture.memberId,
+            fixture.phone.takeLast(4),
+        )
+        assertEquals(HttpStatusCode.OK, removed.status, removed.bodyAsText())
+
+        // The console route's own account service is not wired in this test
+        // config, so the re-registration rule is pinned on the service itself.
+        val accounts = AccountService(db, TokenIssuer(db))
+        val outcome = accounts.signUp(
+            SignUpRequest(
+                phone = fixture.phone,
+                password = "hopademo2026",
+                platform = "android",
+                name = "Pixel",
+                publicKey = base64Key(),
+                alg = "x25519",
+                selfWrappedKey = base64Key(),
+            ),
+            remoteAddress = "198.51.100.9",
+        )
+
+        assertTrue(outcome is AccountOutcome.Ok, outcome.toString())
+    }
+
+    /** A fresh 32-byte key as standard base64, which the account routes accept. */
+    private fun base64Key(): String {
+        val bytes = ByteArray(32)
+        random.nextBytes(bytes)
+        return java.util.Base64.getEncoder().encodeToString(bytes)
+    }
+
+    private fun householdExists(householdId: String): Boolean = db.tenant(householdId) { connection ->
+        connection.createStatement().use { statement ->
+            statement.executeQuery("select count(*) from households").use { rows ->
+                rows.next()
+                rows.getInt(1) > 0
+            }
+        }
+    }
+
+    private fun accountExists(accountId: String): Boolean = db.read { connection ->
+        connection.prepareStatement("select count(*) from accounts where id = ?::uuid").use {
+            it.setString(1, accountId)
+            it.executeQuery().use { rows ->
+                rows.next()
+                rows.getInt(1) > 0
+            }
+        }
+    }
+
+    private suspend fun HttpClient.removeAccount(
+        token: String,
+        household: String,
+        member: String,
+        confirm: String,
+        block: HttpRequestBuilder.() -> Unit = {},
+    ): HttpResponse = submitForm(
+        url = "/console/account/remove",
+        formParameters = Parameters.build {
+            append("household", household)
+            append("member", member)
+            append("confirm", confirm)
+        },
+    ) {
+        header("Cookie", "hopa_admin=$token")
+        block()
     }
 }

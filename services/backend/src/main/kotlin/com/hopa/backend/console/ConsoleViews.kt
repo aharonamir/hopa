@@ -198,5 +198,30 @@ object ConsoleViews {
                 }
             }
         }
+        val masked = row.maskedPhone
+        if (masked != null && row.accountStatus != "none") {
+            h3 { +"Remove account" }
+            p {
+                +("Deletes the household, its devices, its tokens and the account. " +
+                    "The phone number can register again afterwards.")
+            }
+            form(action = "/console/account/remove", method = FormMethod.post) {
+                input(type = InputType.hidden, name = "household") { value = row.householdId }
+                input(type = InputType.hidden, name = "member") { value = row.memberId }
+                p {
+                    label { +"Type $masked to confirm" }
+                    input(type = InputType.text, name = "confirm")
+                }
+                p { input(type = InputType.submit) { value = "Remove account" } }
+            }
+        }
     }
+
+    /** The confirmation page after an account and its household are gone. */
+    fun removed(householdId: String, devices: Int): HTML.() -> Unit =
+        page("Hopa console - account removed") {
+            h1 { +"Account removed" }
+            p { +"Household $householdId and its $devices device(s) are gone." }
+            p { a(href = "/console") { +"Back to the console" } }
+        }
 }

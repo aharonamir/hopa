@@ -2,6 +2,7 @@ package com.hopa.backend.console
 
 import com.hopa.backend.ServerConfig
 import com.hopa.backend.accounts.Phones
+import com.hopa.backend.admin.AccountRemoval
 import com.hopa.backend.admin.AdminIdentity
 import com.hopa.backend.admin.AdminSessionOutcome
 import com.hopa.backend.admin.DiagSender
@@ -210,6 +211,76 @@ fun Application.consoleRoutes(config: ServerConfig) {
                 is DiagSender.Result.Refused -> call.respondHtml(
                     result.status,
                     ConsoleViews.error(result.status.value, result.message),
+                )
+            }
+        }
+
+        post("/console/account/remove") {
+            val admin = call.consoleAdminOrRedirect(config) ?: return@post
+            // The same login-CSRF guard as the sign-in form: a cross-site post
+            // must never delete a household.
+            if (call.crossSite()) {
+                call.respond(HttpStatusCode.Forbidden)
+                return@post
+            }
+            val removal = config.accountRemoval
+            val lookup = config.householdLookup
+            if (removal == null || lookup == null) {
+                call.respondHtml(
+                    HttpStatusCode.ServiceUnavailable,
+                    ConsoleViews.error(503, "account removal is not configured"),
+                )
+                return@post
+            }
+            val params = try {
+                call.receiveBoundedParameters()
+            } catch (_: BodyTooLarge) {
+                call.respondError(
+                    HttpStatusCode.PayloadTooLarge,
+                    "E_SCHEMA",
+                    "request body is larger than 64 KiB",
+                )
+                return@post
+            }
+            val household = params["household"]
+                ?.takeIf { UUID_PATTERN.matches(it) }
+                ?.let { UUID.fromString(it).toString() }
+            val member = params["member"]
+                ?.takeIf { UUID_PATTERN.matches(it) }
+                ?.let { UUID.fromString(it).toString() }
+            if (household == null || member == null) {
+                call.respondHtml(
+                    HttpStatusCode.BadRequest,
+                    ConsoleViews.error(400, "household and member are required uuids"),
+                )
+                return@post
+            }
+            val row = lookup.lookup(admin.adminId, household)
+                ?.firstOrNull { it.memberId == member }
+            if (row == null || row.accountStatus == "none") {
+                call.respondHtml(
+                    HttpStatusCode.BadRequest,
+                    ConsoleViews.error(400, "no account behind this member"),
+                )
+                return@post
+            }
+            val tail = row.phone?.takeLast(4)
+            if (tail == null || params["confirm"]?.trim() != tail) {
+                call.respondHtml(
+                    HttpStatusCode.BadRequest,
+                    ConsoleViews.error(400, "type the last four digits shown to confirm"),
+                )
+                return@post
+            }
+            when (val outcome = removal.remove(admin.adminId, household, member)) {
+                is AccountRemoval.Outcome.Removed -> call.respondHtml(
+                    HttpStatusCode.OK,
+                    ConsoleViews.removed(outcome.householdId, outcome.devices),
+                )
+
+                is AccountRemoval.Outcome.Refused -> call.respondHtml(
+                    HttpStatusCode.BadRequest,
+                    ConsoleViews.error(400, outcome.message),
                 )
             }
         }

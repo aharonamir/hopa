@@ -7,6 +7,7 @@ import com.hopa.backend.accounts.OtpService
 import com.hopa.backend.accounts.SmsPort
 import com.hopa.backend.accounts.accountRoutes
 import com.hopa.backend.accounts.otpRoutes
+import com.hopa.backend.admin.AccountRemoval
 import com.hopa.backend.admin.AdminAuth
 import com.hopa.backend.admin.AdminSessions
 import com.hopa.backend.admin.HouseholdLookup
@@ -153,6 +154,11 @@ fun main() {
         adminLookups = adminLookups,
         adminSessions = database?.let(::AdminSessions),
         householdLookup = database?.let { HouseholdLookup(it, eventLog) },
+        accountRemoval = if (database != null && pgDevices != null) {
+            AccountRemoval(database, pgDevices, registry::kick, eventLog)
+        } else {
+            null
+        },
         devices = devices,
         registry = registry,
         db = database?.let(::PostgresProbe) ?: DbProbe.Unconfigured,
