@@ -226,6 +226,33 @@ fire; the scan screen's paste field completed the vouch (`Scan PC QR` →
 `Use this code` → `Vouch for this PC`). Sync v0 (`#1`) still does not exist, so
 one encrypted task each way remains unproven.
 
+### Clean-install run: register → connect → pair, in one household
+
+`adb shell pm clear com.hopa.android` gave the same state as a fresh install, so
+the whole chain ran on the final build (`0.1.0-261125-1300`).
+
+| Step | Result | Evidence |
+|---|---|---|
+| Register from the phone with a phone number | **New account, member and household** | Sign-up (+972501234998) created account `b29ae304-5ef1-43e2-bd4f-9255a6e00eb7`, member `62809548-4ff4-45d3-add7-25361576a91c`, household `8e4b5b01-4a47-4ec2-95a2-a752d18cec5b` at `12:39:15.549Z`; the member row joined the account and the household. |
+| Connect to the backend | **Socket stored and opened on the first cold start** | Stored `backend_url` = `ws://127.0.0.1:8080/v1/gateway` (read out of `hopa_settings.preferences_pb`); device `ed713b14-b564-4671-b6f1-1db2c965d678` `last_seen_at` `12:39:36.647Z`. |
+| Pair the PC by QR into that household | **Vouched and claimed** | Pending `a17f2963-cd0f-42e1-8af3-131d824968be` ("Windows PC", fingerprint `a7dbcf8c`): vouched by `ed713b14…` at `12:42:19.107824Z`, claimed `12:42:23.69831Z`, `wrapped_key` 60 bytes; PC `f8bbeb8e-f4e8-4688-8efd-f9986b3c9c7c` `last_seen_at` `12:42:23.848Z`; sidecar printed `admitted as f8bbeb8e-… to household 8e4b5b01-…`. |
+| `diag.ping` from the console **form** to the phone | **Delivered and acked** | `POST /console/device/ed713b14…/diag` → "Diagnostic accepted", task `4e0798a8-66ed-46fd-a991-15a1d1bd2d53`, trace `00-28dbfeda65c325b1e2c8cf5b48f3f082-680b1b18f4159a8b-01`, `delivered` → `acked` at `12:43:24.737Z`. |
+| `diag.ping` to the PC in the same household | **Delivered and done** | Task `a990504b-a570-48db-ad68-113d6174f950`, trace `00-0a34797eee3f30844fd56cbb4be6cc0d-136bd26283b7e4a4-01`, row `done`. |
+
+Console (`/console`, signed in as `admin@hopa.test`) showed the household with
+both devices `online` and the household/queue tables; the lookup wrote
+`admin.pii.read` for the phone queries.
+
+Two product notes from this run, neither blocking:
+
+- The gateway session starts on the next app launch, not when sign-up finishes:
+  right after registering the device row existed but `last_seen_at` stayed
+  empty until the app was force-stopped and started.
+- The "My computer" header pill reads `Not set up` after a successful gateway
+  pairing, because `paired` is still computed from the legacy bridge token
+  (`state.settings.bridgeUrl && state.bridgeKey`), not from the gateway device.
+  The gateway card below it read `Device … · connected`.
+
 ## Pre-demo
 
 - [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
