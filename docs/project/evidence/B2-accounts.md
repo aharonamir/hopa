@@ -253,6 +253,36 @@ Two product notes from this run, neither blocking:
   (`state.settings.bridgeUrl && state.bridgeKey`), not from the gateway device.
   The gateway card below it read `Device … · connected`.
 
+### The WPF app joined the same household
+
+The Windows app (`apps/windows/Hopa.Windows`, build `net10.0-windows` from
+`11:18`) was paired as a third device, so the PC side of the link is the real
+app and not only the headless sidecar.
+
+| Step | Result | Evidence |
+|---|---|---|
+| Start the app | **Runs** | `Hopa.Windows.exe` needs `DOTNET_ROOT=%USERPROFILE%\.dotnet10` (runtime 10.0.5); the machine default `C:\Program Files\dotnet` only has 8.0.34 and the exe exits with “You must install or update .NET”. |
+| Mint an operator link for the phone's household | **Fixed, then minted** | `POST /v1/pair/sessions` (bootstrap token) with `householdId` of `8e4b5b01…` returned `hopa://pair?v=1&h=8e4b5b01…&p=Ei23Z…&u=ws://127.0.0.1:8080/v1/gateway`. Before the fix it answered `E_SCHEMA unknown household` (see below). |
+| Pair from Settings → General → “Phone link (backend gateway)” | **Paired** | The field read `Paired as be27c226-28a1-4703-bda1-c127e6dc6da2.`; device `be27c226…` named `TRC240300069-X1` (the machine name), household `8e4b5b01…`. |
+| Socket after relaunch | **Online; queued ping delivered** | `last_seen_at 13:16:23.451Z`; the `diag.ping` that was `queued` while the app was closed became `delivered` at `13:16:23.498Z` on connect. |
+
+Two more findings:
+
+3. **`mint` into an existing household was refused under a BYPASSRLS role.**
+   `PairingService.mint` checked `select count(*) from households` inside the
+   tenant scope and compared it to 1. With the local `postgres` superuser, RLS is
+   bypassed, the count saw every household, and a valid `householdId` was
+   rejected as `E_SCHEMA unknown household`. The check now filters
+   `where id = ?::uuid`, so it is exact with or without RLS. `PairingHttpTest`
+   (9 tests, including “a session minted for an existing household joins it”) is
+   green.
+4. **The Windows gateway ignores `diag.*`.** `GatewayFrameKind` has no
+   diagnostic kind, so a console `diag.ping` reaches the app and stays
+   `delivered`; the Android client routes `diag.*` to its handler and acks. The
+   PC app therefore cannot answer a console diagnostic yet.
+   The app's main window also still shows `No bridge` after a gateway pairing,
+   for the same reason as the phone pill: that label is the legacy bridge.
+
 ## Pre-demo
 
 - [ ] Confirm the Render edge overwrites a client-supplied `X-Forwarded-For`
