@@ -49,13 +49,19 @@ class PairingService(
 
         val household = householdId ?: UUID.randomUUID().toString()
         if (householdId != null) {
+            // Ask for this id explicitly: a role that bypasses RLS (the local
+            // superuser) sees every household from inside the tenant scope, so a
+            // bare count says "unknown" for a household that does exist.
             val exists = db.tenant(householdId) { connection ->
-                connection.createStatement().use { statement ->
-                    statement.executeQuery("select count(*) from households").use { rows ->
-                        rows.next()
-                        rows.getInt(1) == 1
+                connection
+                    .prepareStatement("select count(*) from households where id = ?::uuid")
+                    .use { statement ->
+                        statement.setString(1, householdId)
+                        statement.executeQuery().use { rows ->
+                            rows.next()
+                            rows.getInt(1) == 1
+                        }
                     }
-                }
             }
             if (!exists) {
                 return PairingOutcome.Refused("E_SCHEMA", "unknown household")
