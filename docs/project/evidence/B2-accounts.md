@@ -329,9 +329,28 @@ the real phone: after a sign-up the device row existed but `last_seen_at`
 stayed empty until the app was backgrounded and refronted. Commit `8e57dfda`
 replaced it with an observer in `BackendSession`: when the stored device id
 changes while the app is in front, the session disconnects and reconnects.
-`storing an identity while in front opens the socket` failed with a 2 s timeout
-before that change and passes now; `rewriting the same identity does not churn
-the socket` covers the refresh path. `BackendSessionTest` 11/11.
+
+That still failed on the device, and the cause was the write order:
+`AccountViewModel.persist` wrote the household and device id into the settings
+flow **before** the access and refresh tokens, so the observer woke on an
+identity `BackendIdentity.stored()` could not use (it needs the tokens) and
+nothing retried when they landed. Commit `f22d6f2f` stores the tokens first in
+both writers (`AccountViewModel.persist`, `BackendIdentity.persist`), with
+`SignInViewModelTest` asserting the identity never lands before its tokens.
+
+Proven on the phone, build `0.1.0-261125-1745`:
+
+| Step | Result | Evidence |
+|---|---|---|
+| Sign in after `pm clear` | **Socket opened with no relaunch** | Device `74a19115-dfc2-4033-8fa0-172ec8d23cd1` created `15:52:10.077Z`, `last_seen_at 15:52:10.215Z` — 138 ms later. |
+| Console after the sign-in | **Online** | `/console/phones` → "2 of 12 online"; the row for `…0088` reads `online` with `2026-11-25T15:52:10.215Z`. |
+
+### Settings → Account (commit `c9857d6f`)
+
+The app now shows the identity it holds, each row with Copy: the full phone
+(`+972501230088`), the household id and the device id. The number is stored at
+sign-up/sign-in (`backendPhone`) and cleared with the rest of the identity.
+`SignInViewModelTest` asserts the normalized number is stored.
 
 ## Pre-demo
 
