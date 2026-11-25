@@ -183,6 +183,10 @@ revocation timing, #3's encrypted task round-trip and camera auto-detect, #5
    with `NoSuchMethodError: PendingState.<init>(7 strings)` → HTTP 500. The run
    was completed by launching with `lib/hopa-backend.jar` ahead of `lib/*`.
    Proper fix: rename one class and add a runtime-boot smoke test.
+   **Fixed** in `3a8faa9d`: the server copy is `PendingPairingState`. Verified by
+   starting the backend with a plain `lib\*` classpath — `POST
+   /v1/pair/pending/resolve` answered `200 {"state":"pending"}` (see the second
+   run below).
 2. **Android stores the HTTP base as the gateway URL.** Sign-up and sign-in save
    `backendUrl = http://host:port`, so `BackendSession` never opens
    `ws(s)://host/v1/gateway`; the phone shows "failed: the gateway is
@@ -190,6 +194,37 @@ revocation timing, #3's encrypted task round-trip and camera auto-detect, #5
    the token TTL therefore returns `E_AUTH`. Fix in
    `app/account/AccountViewModel.persist` (or derive it in
    `BackendIdentity.stored`).
+   **Fixed** in `c3c5f068` (`BackendUrls.gatewayUrl()` + `BackendIdentity.stored()`
+   + `AccountViewModel.persist`) and `ee2fdea4` (a refresh keeps the socket URL).
+   Regression tests: `PairingLinksTest` (`gatewayUrl`), `SignInViewModelTest`
+   (stored `backendUrl` is the socket), `BackendSessionTest` ("a refresh keeps the
+   v1 gateway socket, not the HTTP origin"). Proven live in the second run below.
+
+## Fixes verified on a second run — 2026-11-25 (afternoon)
+
+Branch `backend-tests` (nothing merged to `main`). Commits: `7569b86e` LAN `ws`
+scheme, `c3c5f068` gateway socket URL, `3a8faa9d` `PendingPairingState` rename,
+`ee2fdea4` refresh keeps the socket URL.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| — | Backend boots with the plain `lib\*` classpath | **Fixed** | `java -cp "…\hopa-backend\lib\*" com.hopa.backend.MainKt`; `GET /v1/health` → `{"ok":true,"version":"0.1.0","db":"ok"}`; `POST /v1/pair/pending/resolve` → `200 {"state":"pending"}` (no jar-order workaround). |
+| 4 | Phone signed in, household and member reused | **Proven** | Phone `2506BPN68G` (Android 17, serial `U8RSJVSWDYIRRK5D`), app `0.1.0-261125-1300` installed `14:24:26`; account `47f3d1b6-a5d3-4194-949a-439c1a6dac38` `+972501234567`, member `c8cb6ca5-66f2-4a30-b272-6e3286f28eca`, household `f108f320-dc6e-425f-b043-cc50cc048549`. |
+| 7 | `diag.ping` reaches a **phone** | **Delivered and acked** | Task `f849f5af-5da4-4ad4-986e-64ef301fa8f6`, trace `00-fd7bdab7f2bb007fba8f34acbb92bad2-76f4acf87bcc5a75-01`, `delivered` → `acked` in 102 ms; phone row `946fd66a-2c4f-49f0-b666-96b1098c8d24` `online: true`. |
+| 3 | Fresh PC admission by a phone-vouched QR | **Proven end to end** | Pending `2cd628a1-a7ef-4033-a163-1faa313cf693` ("Windows PC", fingerprint `8bb258f5`, matches the sidecar's own printed fingerprint): vouched by phone `946fd66a…` at `12:32:09.479608Z`, claimed `12:32:13.956524Z`, `wrapped_key` 60 bytes, new PC device `3e0ee6ed-c6f8-4276-9733-53dbaf6e25d9` `online: true` at `12:32:14.339Z`; sidecar printed `admitted as 3e0ee6ed-… to household f108f320-…` and `{"type":"ready","version":1}`. |
+| 7 | `diag.ping` reaches the newly paired **PC** | **Delivered and done** | Task `68212479-9b69-471d-b268-412ef0d03de5`, trace `00-c6e0b18c84ef0694841d319f7ae970f2-0528a95b3e8bf042-01`, `delivered` → row `done` at `12:32:44.926Z`. |
+| 9 | No plaintext payload or phone number in the log | **Clean** | `Select-String -Path <backend log> -Pattern 'Bearer ', '\+[0-9]{8,15}'` → 0 matches. |
+
+Gateway-socket fix, proven live: the stored `backend_url` was still
+`http://127.0.0.1:8080` from the earlier build, yet the card read
+`Device 946fd66a · connected` and the device row went `online: true` after a
+relaunch that was more than 90 minutes past the access-token TTL — so the read
+path normalised the URL and the refresh kept it.
+
+Gap carried: the camera preview showed the QR, but ML Kit auto-detect did not
+fire; the scan screen's paste field completed the vouch (`Scan PC QR` →
+`Use this code` → `Vouch for this PC`). Sync v0 (`#1`) still does not exist, so
+one encrypted task each way remains unproven.
 
 ## Pre-demo
 
