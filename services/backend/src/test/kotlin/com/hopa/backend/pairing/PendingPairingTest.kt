@@ -152,6 +152,29 @@ class PendingPairingTest {
     }
 
     @Test
+    fun `a LAN scheme override mints a ws QR`() = testApplication {
+        application {
+            module(
+                ServerConfig(
+                    version = "0.1.0",
+                    pendingPairings = PendingPairingService(
+                        db,
+                        clock = clock::get,
+                        publicScheme = "ws",
+                    ),
+                ),
+            )
+        }
+
+        val response = client.mint()
+
+        assertEquals(HttpStatusCode.Created, response.status)
+        val qr = bodyOf(response.bodyAsText())["qr"]!!.jsonPrimitive.content
+        assertTrue(qr.contains("&u=ws://"), qr)
+        assertFalse(qr.contains("&u=wss://"), qr)
+    }
+
+    @Test
     fun `a mint returns a QR with the secret and stores only its hash`() = testApplication {
         application { module(config()) }
 

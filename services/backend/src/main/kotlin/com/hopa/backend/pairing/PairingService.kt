@@ -17,9 +17,17 @@ class PairingService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val publicHost: String =
         System.getenv("HOPA_PUBLIC_HOST") ?: "hopa-backend.onrender.com",
+    /** `wss` in public deployments; `HOPA_PUBLIC_SCHEME=ws` for a plain-HTTP LAN run. */
+    private val publicScheme: String =
+        System.getenv("HOPA_PUBLIC_SCHEME") ?: "wss",
     private val tokens: TokenIssuer = TokenIssuer(db, clock),
     perMinute: Int = 5,
 ) : PairingApi {
+    init {
+        require(publicScheme == "ws" || publicScheme == "wss") {
+            "HOPA_PUBLIC_SCHEME must be ws or wss"
+        }
+    }
     private val mintLimiter = RateLimiter(perMinute, 60_000, clock)
     private val claimLimiter = RateLimiter(perMinute, 60_000, clock)
 
@@ -87,7 +95,7 @@ class PairingService(
             }
         }
 
-        val qr = "hopa://pair?v=1&h=$household&p=$session&u=wss://$publicHost/v1/gateway"
+        val qr = "hopa://pair?v=1&h=$household&p=$session&u=$publicScheme://$publicHost/v1/gateway"
         return PairingOutcome.Ok(Minted(session, qr, Instant.ofEpochMilli(expiresAt).toString()))
     }
 

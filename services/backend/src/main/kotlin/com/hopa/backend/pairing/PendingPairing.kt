@@ -87,10 +87,21 @@ class PendingPairingService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val publicHost: String =
         System.getenv("HOPA_PUBLIC_HOST") ?: "hopa-backend.onrender.com",
+    /**
+     * The QR's URL scheme. Public deployments are `wss`; a plain-HTTP LAN run
+     * sets `HOPA_PUBLIC_SCHEME=ws` so the phone and the PC can pair without TLS.
+     */
+    private val publicScheme: String =
+        System.getenv("HOPA_PUBLIC_SCHEME") ?: "wss",
     mintPerMinute: Int = 5,
     resolvePerMinute: Int = 30,
     vouchPerMinute: Int = 10,
 ) {
+    init {
+        require(publicScheme == "ws" || publicScheme == "wss") {
+            "HOPA_PUBLIC_SCHEME must be ws or wss"
+        }
+    }
     private val mintLimiter = RateLimiter(mintPerMinute, 60_000, clock)
     private val resolveLimiter = RateLimiter(resolvePerMinute, 60_000, clock)
     private val vouchLimiter = RateLimiter(vouchPerMinute, 60_000, clock)
@@ -141,7 +152,7 @@ class PendingPairingService(
 
         // The pending QR names only the secret and the gateway: it carries no
         // household, because none exists until an operator vouches.
-        val qr = "hopa://pair?v=1&s=$secret&u=wss://$publicHost/v1/gateway"
+        val qr = "hopa://pair?v=1&s=$secret&u=$publicScheme://$publicHost/v1/gateway"
         return PairingOutcome.Ok(
             PendingMinted(
                 sessionId = sessionId,
