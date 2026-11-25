@@ -6,6 +6,7 @@ import com.hopa.app.link.session.SessionFixtures.FakeSettings
 import com.hopa.app.link.session.SessionFixtures.gateway
 import com.hopa.app.link.session.SessionFixtures.pairingServer
 import com.hopa.app.link.session.SessionFixtures.session
+import com.hopa.backend.pairing.BackendPairing
 import com.hopa.backend.pairing.PairingLink
 import com.hopa.backend.wire.BackendEnvelope
 import java.util.Base64
@@ -281,6 +282,34 @@ class BackendSessionTest {
             assertEquals(TRACE, link.acks.single().trace)
         } finally {
             session.disconnect()
+        }
+    }
+
+    @Test
+    fun `a refresh keeps the v1 gateway socket, not the HTTP origin`() = runBlocking {
+        val server = pairingServer(MockResponse().setResponseCode(201).setBody(claimResponse()))
+        try {
+            val settings = FakeSettings().apply {
+                seed(
+                    url = server.url("/").toString(),
+                    device = "d1",
+                    household = "h1",
+                    accessToken = "a1",
+                    refreshToken = "r1",
+                    privateKey = "key",
+                )
+            }
+
+            val refreshed = BackendIdentity(settings) { BackendPairing(it) }.refresh()
+
+            assertNotNull(refreshed)
+            assertEquals(
+                com.hopa.backend.pairing.BackendUrls.gatewayUrl(server.url("/").toString()),
+                refreshed!!.gatewayUrl,
+            )
+            assertEquals("a1", refreshed.accessToken)
+        } finally {
+            server.shutdown()
         }
     }
 

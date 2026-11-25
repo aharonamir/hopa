@@ -80,7 +80,8 @@ internal class BackendIdentity(
                 val merged = refreshed.copy(
                     deviceId = refreshed.deviceId.ifBlank { current.backendDeviceId },
                     householdId = refreshed.householdId.ifBlank { current.backendHouseholdId },
-                    gatewayUrl = current.backendUrl,
+                    // Keep the socket URL: the stored URL may still be an HTTP origin.
+                    gatewayUrl = BackendUrls.gatewayUrl(current.backendUrl),
                 )
                 settings.setBackendAccessToken(merged.accessToken)
                 settings.setBackendRefreshToken(merged.refreshToken)
