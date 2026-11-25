@@ -31,6 +31,9 @@ fun SignInRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.signedIn) {
         if (state.signedIn) {
+            // The gateway session waits for the next launch otherwise, so a fresh
+            // account shows up offline in the console until the app restarts.
+            container.backend.identityChanged()
             onSignedIn()
         }
     }
