@@ -42,7 +42,7 @@ data class PendingMinted(
 
 /** What a poller may learn from a session it holds the secret for. */
 @Serializable
-data class PendingState(
+data class PendingPairingState(
     val sessionId: String,
     val state: String,
     val name: String,
@@ -163,7 +163,7 @@ class PendingPairingService(
         )
     }
 
-    fun resolve(secret: String, remoteAddress: String): PairingOutcome<PendingState> {
+    fun resolve(secret: String, remoteAddress: String): PairingOutcome<PendingPairingState> {
         if (!resolveLimiter.allow(remoteAddress)) {
             return PairingOutcome.Refused("E_RATE", "too many pending pairing polls", retryable = true)
         }
@@ -202,7 +202,7 @@ class PendingPairingService(
             else -> "pending"
         }
         return PairingOutcome.Ok(
-            PendingState(
+            PendingPairingState(
                 sessionId = row.id,
                 state = state,
                 name = row.name,
