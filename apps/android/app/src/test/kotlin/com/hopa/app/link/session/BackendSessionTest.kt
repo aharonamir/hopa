@@ -27,7 +27,6 @@ import okhttp3.mockwebserver.MockResponse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import com.hopa.app.link.push.FirebaseToken
@@ -316,21 +315,19 @@ class BackendSessionTest {
     }
 
     @Test
-    fun `identityChanged opens the socket as soon as a sign-in stores the identity`() = runBlocking {
+    fun `storing an identity while in front opens the socket`() = runBlocking {
         val settings = FakeSettings()
         val links = CopyOnWriteArrayList<FakeLink>()
-        val builds = AtomicInteger()
         val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
-            builds.incrementAndGet()
             FakeLink(credentials, pushToken, refresh).also { links += it }
         })
 
         try {
-            // The app was already in front when the sign-in screen was showing.
             session.onForeground()
-            delay(100)
-            assertEquals(0, builds.get())
+            delay(200)
+            assertEquals(0, links.size)
 
+            // A sign-in writes the identity; nothing else calls into the session.
             settings.seed(
                 url = "ws://x/v1/gateway",
                 device = "d1",
@@ -339,12 +336,11 @@ class BackendSessionTest {
                 refreshToken = "r1",
                 privateKey = "key",
             )
-            session.identityChanged()
 
             withTimeout(2_000) {
                 while (links.isEmpty()) delay(10)
             }
-            assertEquals(1, builds.get())
+            assertEquals(1, links.size)
             assertTrue(links.first().started)
         } finally {
             session.disconnect()
@@ -352,7 +348,7 @@ class BackendSessionTest {
     }
 
     @Test
-    fun `a second identityChanged keeps one live link`() = runBlocking {
+    fun `rewriting the same identity does not churn the socket`() = runBlocking {
         val settings = FakeSettings().paired("ws://x/v1/gateway")
         val links = CopyOnWriteArrayList<FakeLink>()
         val session = session(settings, linkFactory = { credentials, _, _, pushToken, refresh ->
@@ -364,15 +360,19 @@ class BackendSessionTest {
             withTimeout(2_000) {
                 while (links.isEmpty()) delay(10)
             }
-            session.identityChanged()
-            withTimeout(2_000) {
-                while (links.size < 2) delay(10)
-            }
+            // A token refresh writes the same device id; the link must survive.
+            settings.seed(
+                url = "ws://x/v1/gateway",
+                device = "d1",
+                household = "h1",
+                accessToken = "a2",
+                refreshToken = "r2",
+                privateKey = "key",
+            )
+            delay(300)
 
-            assertEquals(2, links.size)
-            assertTrue(links.first().stopped)
-            assertFalse(links.last().stopped)
-            assertSame(links.last(), session.currentLink())
+            assertEquals(1, links.size)
+            assertFalse(links.first().stopped)
         } finally {
             session.disconnect()
         }

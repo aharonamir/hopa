@@ -103,9 +103,30 @@ class BackendSession(
 
     init {
         scope.launch {
+            // The first emission is whatever disk held at launch; onForeground
+            // opens that one. A later change means a sign-in or sign-up stored an
+            // identity while the app was running, so open it now instead of
+            // waiting for the next launch. Reacting to the stored value, rather
+            // than to the sign-in call, cannot lose a race with the write.
+            var primed = false
+            var observed = ""
             settings.settings.collect { current ->
                 knownDeviceId = current.backendDeviceId
                 knownGatewayUrl = current.backendUrl
+                if (!primed) {
+                    primed = true
+                    observed = current.backendDeviceId
+                    return@collect
+                }
+                if (current.backendDeviceId != observed) {
+                    observed = current.backendDeviceId
+                    if (current.backendDeviceId.isNotBlank()) {
+                        disconnect()
+                        if (foreground) {
+                            connect()
+                        }
+                    }
+                }
             }
         }
     }
@@ -124,18 +145,6 @@ class BackendSession(
         throw cancelled
     } catch (error: Exception) {
         Result.failure(error)
-    }
-
-    /**
-     * The stored identity just changed (a sign-up or sign-in wrote it while the
-     * app was already in front). Open it now instead of waiting for the next
-     * launch; [disconnect] first so two sockets never rotate one token family.
-     */
-    suspend fun identityChanged() {
-        disconnect()
-        if (foreground) {
-            connect()
-        }
     }
 
     /** The activity is visible: keep presence open until [onBackground]. */
