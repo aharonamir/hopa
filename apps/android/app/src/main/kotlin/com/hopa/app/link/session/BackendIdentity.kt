@@ -3,6 +3,7 @@ package com.hopa.app.link.session
 import com.hopa.backend.pairing.BackendCredentials
 import com.hopa.backend.pairing.BackendPairing
 import com.hopa.backend.pairing.BackendPairingFailure
+import com.hopa.backend.pairing.BackendUrls
 import com.hopa.backend.pairing.PairingLink
 import com.hopa.backend.pairing.X25519Keys
 import com.hopa.stores.SettingsRepository
@@ -55,7 +56,8 @@ internal class BackendIdentity(
             accessToken = access,
             refreshToken = refresh,
             expiresAt = "",
-            gatewayUrl = current.backendUrl,
+            // Sign-up stores an HTTP origin; the socket needs `/v1/gateway`.
+            gatewayUrl = BackendUrls.gatewayUrl(current.backendUrl),
         )
     }
 

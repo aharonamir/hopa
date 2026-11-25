@@ -6,6 +6,7 @@ import com.hopa.backend.accounts.Phones
 import com.hopa.backend.crypto.KeyWrap
 import com.hopa.backend.pairing.AccountClient
 import com.hopa.backend.pairing.BackendPairingFailure
+import com.hopa.backend.pairing.BackendUrls
 import com.hopa.backend.pairing.SignedInAccount
 import com.hopa.backend.pairing.X25519Keys
 import com.hopa.stores.SettingsRepository
@@ -108,7 +109,8 @@ class AccountViewModel(
     private suspend fun persist(account: SignedInAccount, privateKey: String) {
         settings.update {
             it.copy(
-                backendUrl = gatewayUrl,
+                // The link opens a socket; store `/v1/gateway`, not the HTTP origin.
+                backendUrl = BackendUrls.gatewayUrl(gatewayUrl),
                 backendDeviceId = account.deviceId,
                 backendHouseholdId = account.householdId,
             )

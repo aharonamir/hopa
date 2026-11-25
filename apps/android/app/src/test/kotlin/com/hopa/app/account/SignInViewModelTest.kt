@@ -3,6 +3,7 @@ package com.hopa.app.account
 import com.hopa.backend.accounts.Phones
 import com.hopa.backend.crypto.KeyWrap
 import com.hopa.backend.pairing.AccountClient
+import com.hopa.backend.pairing.BackendUrls
 import com.hopa.backend.pairing.X25519Keys
 import com.hopa.contracts.json.HopaJson
 import com.hopa.stores.AppSettings
@@ -80,6 +81,10 @@ class SignInViewModelTest {
             assertEquals("rt1", settings.backendRefreshToken())
             assertEquals("d1", settings.current().backendDeviceId)
             assertEquals("h1", settings.current().backendHouseholdId)
+            assertEquals(
+                BackendUrls.gatewayUrl(server.url("/").toString()),
+                settings.current().backendUrl,
+            )
             assertEquals(true, viewModel.state.value.signedIn)
         } finally {
             server.shutdown()

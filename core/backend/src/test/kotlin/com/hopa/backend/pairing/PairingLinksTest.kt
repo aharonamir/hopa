@@ -57,4 +57,15 @@ class PairingLinksTest {
         assertEquals("http://127.0.0.1:8080", BackendUrls.httpBase("ws://127.0.0.1:8080/v1/gateway"))
         assertEquals("https://example.test:8443", BackendUrls.httpBase("wss://example.test:8443/v1/gateway/"))
     }
+
+    @Test
+    fun `gatewayUrl turns an http base into the v1 socket, idempotently`() {
+        assertEquals("ws://127.0.0.1:8080/v1/gateway", BackendUrls.gatewayUrl("http://127.0.0.1:8080"))
+        assertEquals("wss://example.test/v1/gateway", BackendUrls.gatewayUrl("https://example.test"))
+        assertEquals(
+            "wss://example.test:8443/v1/gateway",
+            BackendUrls.gatewayUrl("wss://example.test:8443/v1/gateway/"),
+        )
+        assertEquals("ws://127.0.0.1:8080/v1/gateway", BackendUrls.gatewayUrl("ws://127.0.0.1:8080/v1/gateway"))
+    }
 }

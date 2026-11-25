@@ -19,4 +19,20 @@ object BackendUrls {
         val port = if (uri.port >= 0) ":${uri.port}" else ""
         return "$scheme://$host$port"
     }
+
+    /**
+     * The socket URL a client actually opens: `/v1/gateway` on the same host and
+     * port, with the scheme the gateway expects. Sign-up stores an HTTP origin,
+     * so this is the one place that turns it into a WebSocket URL; an input that
+     * already names the gateway stays unchanged.
+     */
+    fun gatewayUrl(base: String): String {
+        val http = httpBase(base)
+        val socket = when {
+            http.startsWith("https://") -> "wss://" + http.removePrefix("https://")
+            http.startsWith("http://") -> "ws://" + http.removePrefix("http://")
+            else -> return http.trimEnd('/') + "/v1/gateway"
+        }
+        return socket.trimEnd('/') + "/v1/gateway"
+    }
 }
